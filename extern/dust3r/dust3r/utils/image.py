@@ -85,7 +85,7 @@ def _resize_pil_image(img, long_edge_size):
     return img.resize(new_size, interp)
 
 
-def load_images(folder_or_list, size, square_ok=False,force_1024 = False):
+def load_images(folder_or_list, size, square_ok=False,force_1024 = False, force_height=None, force_width=None):
     """ open and convert all images in a list or folder to proper input format for DUSt3R
     """
     if isinstance(folder_or_list, str):
@@ -110,7 +110,7 @@ def load_images(folder_or_list, size, square_ok=False,force_1024 = False):
             continue
         img = exif_transpose(PIL.Image.open(os.path.join(root, path))).convert('RGB')
         if force_1024:
-            img = center_crop_pil_image(img)
+            img = center_crop_pil_image(img, target_width=force_width, target_height=force_height)
         img_ori = img
         W1, H1 = img.size
         if size == 224:

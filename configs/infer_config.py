@@ -11,7 +11,7 @@ def get_parser():
     parser.add_argument('--exp_name',  type=str, default=None, help='Experiment name, use image file name by default')
 
     ## renderer
-    parser.add_argument('--mode',  type=str,  default='single_view_txt', help="Currently we support 'single_view_txt' and 'single_view_target'")
+    parser.add_argument('--mode',  type=str,  default='single_view_txt', help="Currently we support 'single_view_txt', 'single_view_target', 'multi_video_interp', 'single_video_interp'")
     parser.add_argument('--traj_txt',  type=str, help="Required for 'single_view_txt' mode, a txt file that specify camera trajectory")
     parser.add_argument('--elevation',  type=float, default=5., help='The elevation angle of the input image in degree. Estimate a rough value based on your visual judgment' )
     parser.add_argument('--center_scale',  type=float, default=1., help='Range: (0, 2]. Scale factor for the spherical radius (r). By default, r is set to the depth value of the center pixel (H//2, W//2) of the reference image')
@@ -56,5 +56,11 @@ def get_parser():
     parser.add_argument('--niter', default=300)
     parser.add_argument('--lr', default=0.01)
     parser.add_argument('--min_conf_thr', default=3.0) # minimum=1.0, maximum=20
+
+    ## v2v
+    parser.add_argument("--use_mast3r", default=False, help="set to true if you want to use the mast3r framework for point cloud creation instead of dust3r")
+    parser.add_argument("--pickle_path",  type=str,  default='/home/emmahaidacher/Masterthesis/MasterThesis/pickle.pkl', help="Path to dynamic point cloud created from pickle") # todo default
+    parser.add_argument("--n_frames", type=int, default=16, help="num of frames for newly generated videos")
+
 
     return parser

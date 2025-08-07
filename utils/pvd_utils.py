@@ -35,7 +35,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from torchvision.transforms import CenterCrop, Compose, Resize
 
-def save_video(data,images_path,folder=None):
+def save_video(data,images_path, images_folder_path=None, folder=None):
     if isinstance(data, np.ndarray):
         tensor_data = (torch.from_numpy(data) * 255).to(torch.uint8)
     elif isinstance(data, torch.Tensor):
@@ -46,6 +46,15 @@ def save_video(data,images_path,folder=None):
         stacked_images = np.stack(images, axis=0)
         tensor_data = torch.from_numpy(stacked_images).to(torch.uint8)
     torchvision.io.write_video(images_path, tensor_data, fps=8, video_codec='h264', options={'crf': '10'})
+
+    # save individual frames
+    if not images_folder_path:
+        return
+
+    os.makedirs(images_folder_path, exist_ok=True)
+    for idx, frame in enumerate(tensor_data):
+        img = Image.fromarray(frame.numpy())
+        img.save(os.path.join(images_folder_path, f"frame_{idx:04d}.png"))
 
 def get_input_dict(img_tensor,idx,dtype = torch.float32):
 

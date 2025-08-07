@@ -1,0 +1,15 @@
+python inference.py \
+--image_dir /media/emmahaidacher/Volume/DATASETS/INTERNET/espresso_short/2_videos_short \
+--out_dir /home/emmahaidacher/Masterthesis/MasterThesis/good_results/ \
+--mode 'multi_video_interp' \
+--bg_trd 0.2 \
+--seed 123 \
+--ckpt_path ./checkpoints/model_sparse.ckpt \
+--config configs/inference_pvd_1024.yaml \
+--ddim_steps 50 \
+--ddim_eta 0.0 \
+--video_length 16 \
+--device 'cuda:0' \
+--height 576 --width 1024 \
+--model_path ./checkpoints/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth \
+--exp_name 'espresso_fixedpose_2cams_60frames_mast3r_sameguidance_det-sampling_temp_dropout_torch-det'

@@ -1,10 +1,17 @@
 import sys
+
 sys.path.append('./extern/dust3r')
+sys.path.append('./extern/mast3r')
+
 from dust3r.inference import inference, load_model
 from dust3r.utils.image import load_images
 from dust3r.image_pairs import make_pairs
 from dust3r.cloud_opt import global_aligner, GlobalAlignerMode
 from dust3r.utils.device import to_numpy
+from mast3r.model import AsymmetricMASt3R
+
+from configs.v2v_config import *
+
 import trimesh
 import torch
 import numpy as np
@@ -21,19 +28,53 @@ import torch.nn.functional as F
 import torchvision.transforms as transforms
 from PIL import Image
 from utils.pvd_utils import *
+from utils.v2v_utils import *
+
 from omegaconf import OmegaConf
 from pytorch_lightning import seed_everything
 from utils.diffusion_utils import instantiate_from_config,load_model_checkpoint,image_guided_synthesis
 from pathlib import Path
 from torchvision.utils import save_image
+import time
+import pickle
 
 class ViewCrafter:
     def __init__(self, opts, gradio = False):
         self.opts = opts
         self.device = opts.device
-        self.setup_dust3r()
+
+        if self.opts.use_mast3r:
+            self.setup_mast3r()
+        else:
+            self.setup_dust3r()
+
         self.setup_diffusion()
         # initialize ref images, pcd
+
+        if self.opts.mode in ['single_video_interp', 'multi_video_interp']:
+            self.first_run = True
+            self.guidance_image = None
+            self.prev_latent = None
+            self.prev_image = None
+            self.first_image = None
+            self.first_latent = None
+            self.run_number = 0
+
+            assert os.path.isdir(self.opts.image_dir)
+            self.outer_folder = setup_structure(self.opts.save_dir, self.opts.image_dir)
+
+            if self.opts.mode == 'single_video_interp': # todo for multi / in viewcrafter ausführen
+                # load pickle
+                with open(self.opts.pickle_path, 'rb') as f:
+                    self.pickle_im_poses = pickle.load(f)
+                    self.pickle_principal_points = pickle.load(f)
+                    self.pickle_focals = pickle.load(f)
+                    self.pickle_pts3d = pickle.load(f)
+                    self.pickle_depths = pickle.load(f)
+                    self.pickle_imgs = pickle.load(f)
+
+            return
+
         if not gradio:
             if os.path.isfile(self.opts.image_dir):
                 self.images, self.img_ori = self.load_initial_images(image_dir=self.opts.image_dir)
@@ -107,9 +148,9 @@ class ViewCrafter:
 
     def nvs_single_view(self, gradio=False):
         # 最后一个view为 0 pose
-        c2ws = self.scene.get_im_poses().detach()[1:] 
+        c2ws = self.scene.get_im_poses().detach()[1:]
         principal_points = self.scene.get_principal_points().detach()[1:] #cx cy
-        focals = self.scene.get_focals().detach()[1:] 
+        focals = self.scene.get_focals().detach()[1:]
         shape = self.images[0]['true_shape']
         H, W = int(shape[0][0]), int(shape[0][1])
         pcd = [i.detach() for i in self.scene.get_pts3d(clip_thred=self.opts.dpt_trd)] # a list of points of size whc
@@ -121,7 +162,7 @@ class ViewCrafter:
         c2ws,pcd =  world_point_to_obj(poses=c2ws, points=torch.stack(pcd), k=-1, r=radius, elevation=self.opts.elevation, device=self.device)
 
         imgs = np.array(self.scene.imgs)
-        
+
         masks = None
 
         if self.opts.mode == 'single_view_nbv':
@@ -148,7 +189,7 @@ class ViewCrafter:
                     phi = [float(i) for i in lines[0].split()]
                     theta = [float(i) for i in lines[1].split()]
                     r = [float(i) for i in lines[2].split()]
-            else: 
+            else:
                 phi, theta, r = self.gradio_traj
             camera_traj,num_views = generate_traj_txt(c2ws, H, W, focals, principal_points, phi, theta, r,self.opts.video_length, self.device,viz_traj=True, save_dir = self.opts.save_dir)
         else:
@@ -160,11 +201,95 @@ class ViewCrafter:
         if self.opts.mode == 'single_view_txt':
             if phi[-1]==0. and theta[-1]==0. and r[-1]==0.:
                 render_results[-1] = self.img_ori
-                
+
         save_video(render_results, os.path.join(self.opts.save_dir, 'render0.mp4'))
         save_pointcloud_with_normals([imgs[-1]], [pcd[-1]], msk=None, save_path=os.path.join(self.opts.save_dir,'pcd0.ply') , mask_pc=False, reduce_pc=False)
         diffusion_results = self.run_diffusion(render_results)
         save_video((diffusion_results + 1.0) / 2.0, os.path.join(self.opts.save_dir, 'diffusion0.mp4'))
+
+        return diffusion_results
+
+    def nvs_single_view_v2v(self, gradio=False):
+        # 最后一个view为 0 pose
+
+        shape = self.pickle_imgs[self.run_number].shape
+        H, W = int(shape[0]), int(shape[1])
+
+        c2ws = self.pickle_im_poses[self.run_number].unsqueeze(0)
+        principal_points = self.pickle_principal_points[self.run_number].unsqueeze(0)
+        focals = self.pickle_focals[self.run_number].unsqueeze(0)
+
+        pcd = [self.pickle_pts3d[self.run_number], self.pickle_pts3d[self.run_number]]
+        depth = [self.pickle_depths[self.run_number], self.pickle_depths[self.run_number]]
+
+        depth_avg = depth[-1][H // 2, W // 2]  # 以图像中心处的depth(z)为球心旋转
+        radius = depth_avg * self.opts.center_scale  # 缩放调整
+
+        ## change coordinate
+        c2ws, pcd = world_point_to_obj(poses=c2ws, points=torch.stack(pcd), k=-1, r=radius,
+                                       elevation=self.opts.elevation, device=self.device)
+
+        imgs = np.array([self.pickle_imgs[self.run_number], self.pickle_imgs[self.run_number]])
+
+        masks = None
+
+        if self.opts.mode == 'single_view_nbv':
+            ## 输入candidate->渲染mask->最大mask对应的pose作为nbv
+            ## nbv模式下self.opts.d_theta[0], self.opts.d_phi[0]代表search space中的网格theta, phi之间的间距; self.opts.d_phi[0]的符号代表方向,分为左右两个方向
+            ## FIXME hard coded candidate view数量, 以left为例,第一次迭代从[左,左上]中选取, 从第二次开始可以从[左,左上,左下]中选取
+            num_candidates = 2
+            candidate_poses, thetas, phis = generate_candidate_poses(c2ws, H, W, focals, principal_points,
+                                                                     self.opts.d_theta[0], self.opts.d_phi[0],
+                                                                     num_candidates, self.device)
+            _, viewmask = self.run_render([pcd[-1]], [imgs[-1]], masks, H, W, candidate_poses, num_candidates)
+            nbv_id = torch.argmin(viewmask.sum(dim=[1, 2, 3])).item()
+            save_image(viewmask.permute(0, 3, 1, 2),
+                       os.path.join(self.opts.save_dir, f"candidate_mask0_nbv{nbv_id}.png"), normalize=True,
+                       value_range=(0, 1))
+            theta_nbv = thetas[nbv_id]
+            phi_nbv = phis[nbv_id]
+            # generate camera trajectory from T_curr to T_nbv
+            camera_traj, num_views = generate_traj_specified(c2ws, H, W, focals, principal_points, theta_nbv, phi_nbv,
+                                                             self.opts.d_r[0], self.opts.video_length, self.device)
+            # 重置elevation
+            self.opts.elevation -= theta_nbv
+        elif self.opts.mode == 'single_view_target':
+            camera_traj, num_views = generate_traj_specified(c2ws, H, W, focals, principal_points, self.opts.d_theta[0],
+                                                             self.opts.d_phi[0], self.opts.d_r[0],
+                                                             self.opts.d_x[0] * depth_avg / focals.item(),
+                                                             self.opts.d_y[0] * depth_avg / focals.item(),
+                                                             self.opts.video_length, self.device)
+        elif self.opts.mode == 'single_view_txt':
+            if not gradio:
+                with open(self.opts.traj_txt, 'r') as file:
+                    lines = file.readlines()
+                    phi = [float(i) for i in lines[0].split()]
+                    theta = [float(i) for i in lines[1].split()]
+                    r = [float(i) for i in lines[2].split()]
+            else:
+                phi, theta, r = self.gradio_traj
+            camera_traj, num_views = generate_traj_txt(c2ws, H, W, focals, principal_points, phi, theta, r,
+                                                       self.opts.video_length, self.device, viz_traj=True,
+                                                       save_dir=self.opts.save_dir)
+        else:
+            raise KeyError(f"Invalid Mode: {self.opts.mode}")
+
+        render_results, viewmask = self.run_render([pcd[-1]], [imgs[-1]], masks, H, W, camera_traj, num_views)
+        render_results = F.interpolate(render_results.permute(0, 3, 1, 2), size=(768, 1024), mode='bilinear',
+                                       align_corners=False).permute(0, 2, 3, 1)
+        render_results[0] = self.img_ori
+        if self.opts.mode == 'single_view_txt':
+            if phi[-1] == 0. and theta[-1] == 0. and r[-1] == 0.:
+                render_results[-1] = self.img_ori
+
+        save_video(render_results, os.path.join(self.opts.save_dir, 'render.mp4'),
+                   os.path.join(self.opts.save_dir, RENDER_FRAMES))
+        save_pointcloud_with_normals([imgs[-1]], [pcd[-1]], msk=None,
+                                     save_path=os.path.join(self.opts.save_dir, 'pcd.ply'), mask_pc=False,
+                                     reduce_pc=False)
+        diffusion_results = self.run_diffusion(render_results)
+        save_video((diffusion_results + 1.0) / 2.0, os.path.join(self.opts.save_dir, 'diffusion.mp4'),
+                   os.path.join(self.opts.save_dir, DIFFUSION_FRAMES))
 
         return diffusion_results
 
@@ -278,6 +403,60 @@ class ViewCrafter:
         # torch.Size([25, 576, 1024, 3])
         return diffusion_results
 
+    def nvs_sparse_view_interp_v2v(self):
+
+        c2ws = self.scene.get_im_poses().detach()
+        principal_points = self.scene.get_principal_points().detach()
+        focals = self.scene.get_focals().detach()
+        shape = self.images[0]['true_shape']
+        H, W = int(shape[0][0]), int(shape[0][1])
+        pcd = [i.detach() for i in self.scene.get_pts3d(clip_thred=self.opts.dpt_trd)]  # a list of points of size whc
+        depth = [i.detach() for i in self.scene.get_depthmaps()]
+
+        ## masks for cleaner point cloud
+        self.scene.min_conf_thr = float(self.scene.conf_trf(torch.tensor(self.opts.min_conf_thr)))
+        depth = self.scene.get_depthmaps()
+        save_depth(depth, os.path.join(self.opts.save_dir, DEPTHS_DIR), False, True)
+        masks = self.scene.get_masks()
+        save_masks(masks, os.path.join(self.opts.save_dir, MASKS_DIR, "before"), False, True)
+        # background suppression masks
+        bgs_mask = [dpt > self.opts.bg_trd * (torch.max(dpt[40:-40, :]) + torch.min(dpt[40:-40, :])) for dpt in depth]
+        save_masks(bgs_mask, os.path.join(self.opts.save_dir, MASKS_DIR, "bgs"), False, True)
+        masks_new = [m + mb for m, mb in zip(masks, bgs_mask)]
+        save_masks(masks_new, os.path.join(self.opts.save_dir, MASKS_DIR, "new"), False, True)
+
+        masks = to_numpy(masks_new)
+        mask_pc = True
+
+        imgs = np.array(self.scene.imgs)
+
+        camera_traj, num_views = generate_traj_interp(c2ws, H, W, focals, principal_points, self.opts.video_length,
+                                                      self.device)
+        render_results, viewmask = self.run_render(pcd, imgs, masks, H, W, camera_traj, num_views)
+        render_results = F.interpolate(render_results.permute(0, 3, 1, 2), size=(576, 1024), mode='bilinear',
+                                       align_corners=False).permute(0, 2, 3, 1)
+
+        for i in range(len(self.img_ori)):
+            render_results[i * (self.opts.video_length - 1)] = self.img_ori[i]
+        save_video(render_results, os.path.join(self.opts.save_dir, f'render.mp4'),
+                   os.path.join(self.opts.save_dir, RENDER_FRAMES))
+        save_pointcloud_with_normals(imgs, pcd, msk=masks, save_path=os.path.join(self.opts.save_dir, f'pcd.ply'),
+                                     mask_pc=mask_pc, reduce_pc=False)
+
+        diffusion_results = []
+        print(f'Generating {len(self.img_ori) - 1} clips\n')
+        for i in range(len(self.img_ori) - 1):
+            print(f'Generating clip {i} ...\n')
+            diffusion_results.append(self.run_diffusion(render_results[
+                                                        i * (self.opts.video_length - 1):self.opts.video_length + i * (
+                                                                    self.opts.video_length - 1)]))
+        print(f'Finish!\n')
+        diffusion_results = torch.cat(diffusion_results)
+        save_video((diffusion_results + 1.0) / 2.0, os.path.join(self.opts.save_dir, f'diffusion.mp4'),
+                   os.path.join(self.opts.save_dir, DIFFUSION_FRAMES))
+        torch.Size([25, 576, 1024, 3])
+        return diffusion_results
+
     def nvs_single_view_eval(self):
 
         # get camera trajectory of the input frames
@@ -381,6 +560,77 @@ class ViewCrafter:
                 all_results.append(diffusion_results_itr)
         return all_results
 
+    def run_single_video_interp(self):
+
+        original_save_dir = self.opts.save_dir
+        input_dir = os.path.join(original_save_dir, INPUTS_DIR) # all inputs
+        results_dir = os.path.join(original_save_dir, RESULTS_DIR) # all results
+        all_frames = sorted(os.listdir(input_dir), key=lambda x: int(os.path.splitext(x)[0]))
+        all_frames = all_frames[:16]
+        # UNCOMMENT IF EXECUTION FAILED for all frames. if you do this, comment out setup_structure()
+        # or if only frames 0-16 should be processed e.g.
+        self.opts.mode = 'single_view_txt' # necessary for inner functions - txt needs to be provided
+
+        print(all_frames)
+        for frame in all_frames:
+            print("running frame", int(frame) + 1, "/", len(all_frames), "run_no: ", self.run_number)
+            start = time.time()
+
+            current_input_dir = os.path.join(input_dir, frame)
+            current_result_dir = os.path.join(results_dir, frame)
+            single_input_image = os.path.join(current_input_dir, os.listdir(current_input_dir)[0])
+
+            self.opts.image_dir = single_input_image
+            self.opts.save_dir = current_result_dir
+
+            os.mkdir(self.opts.save_dir)
+            self.images, self.img_ori = self.load_initial_images(image_dir=self.opts.image_dir)
+
+            self.nvs_single_view_v2v()
+
+            self.opts.save_dir = original_save_dir # todo necessary?
+            end = time.time()
+            time_per_frame = (end - start) / 60
+            print("elapsed time: {:.2f}min".format(time_per_frame))
+            remaining_time = time_per_frame * (len(all_frames) - int(frame) + 1)
+            print("estimated remaining time: {:.2f}min, {:.2f}h\n".format(remaining_time,
+                                                                          remaining_time / 60))
+            self.run_number = self.run_number + 1
+
+        separate_cameras(os.path.join(self.opts.save_dir, RESULTS_DIR),
+                         os.path.join(self.opts.save_dir, SEPERATED_CAMERAS_DIR))
+
+    def run_multi_video_interp(self):
+        original_save_dir = self.opts.save_dir
+        input_dir = os.path.join(original_save_dir, INPUTS_DIR)
+        results_dir = os.path.join(original_save_dir, RESULTS_DIR)
+        all_frames = sorted(os.listdir(input_dir), key=lambda x: int(os.path.splitext(x)[0]))
+        all_frames = all_frames[:self.opts.n_frames] # todo assert that n_frames < input_vid_frames
+
+        # UNCOMMENT IF EXECUTION FAILED for all frames. if you do this, comment out setup_structure()
+        # or if only frames 0-16 should be processed e.g.
+
+        print(all_frames)
+        for frame in all_frames:
+            print("running frame", int(frame) + 1, "/", len(all_frames))
+            start = time.time()
+
+            self.opts.image_dir = os.path.join(input_dir, frame)
+            self.opts.save_dir = os.path.join(results_dir, frame)
+
+            os.mkdir(self.opts.save_dir)
+            self.images, self.img_ori = self.load_initial_dir(image_dir=self.opts.image_dir)
+            self.run_dust3r(input_images=self.images, clean_pc=True)
+            self.nvs_sparse_view_interp_v2v()
+
+            end = time.time()
+            time_per_frame = (end - start) / 60
+            remaining_time = time_per_frame * (len(all_frames) - int(frame))
+            print("elapsed time: {:.2f}min, est. remaining time: {:.2f}min, {:.2f}h\n".format(time_per_frame, remaining_time, remaining_time / 60))
+
+        separate_cameras(results_dir, os.path.join(original_save_dir, SEPERATED_CAMERAS_DIR))
+
+
     def setup_diffusion(self):
         seed_everything(self.opts.seed)
 
@@ -398,18 +648,22 @@ class ViewCrafter:
         model.eval()
         self.diffusion = model
 
-        h, w = self.opts.height // 8, self.opts.width // 8
+        h, w = self.opts.height // 8, self.opts.width // 8 # latent size
         channels = model.model.diffusion_model.out_channels
         n_frames = self.opts.video_length
         self.noise_shape = [self.opts.bs, channels, n_frames, h, w]
 
     def setup_dust3r(self):
         self.dust3r = load_model(self.opts.model_path, self.device)
-    
+
+    def setup_mast3r(self):
+        self.mast3r = AsymmetricMASt3R.from_pretrained(self.opts.model_path).to(self.device)
+
     def load_initial_images(self, image_dir):
         ## load images
         ## dict_keys(['img', 'true_shape', 'idx', 'instance', 'img_ori']),张量形式
-        images = load_images([image_dir], size=512,force_1024 = True)
+
+        images = load_images([image_dir], size=512, force_1024 = True, force_height = self.opts.height, force_width = self.opts.width)
         img_ori = (images[0]['img_ori'].squeeze(0).permute(1,2,0)+1.)/2. # [576,1024,3] [0,1]
 
         if len(images) == 1:
