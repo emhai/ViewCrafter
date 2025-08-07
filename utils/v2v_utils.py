@@ -6,9 +6,10 @@ import cv2
 import numpy as np
 import torch
 from PIL import Image
+import torch.nn.functional as F
+import torchvision.transforms as transforms
 
-from configs.v2v_config import OUTPUT_LOG_FILE, CAMERA_FRAMES_DIR, INPUTS_DIR, RESULTS_DIR, SEPERATED_CAMERAS_DIR, \
-    ORIGINAL_VIDEOS_DIR, DIFFUSION_FRAMES, RENDER_FRAMES, MASKS_DIR, GUIDANCE_IMAGE, GUIDANCE_DIR
+from configs.v2v_config import *
 
 import matplotlib.pyplot as plt
 
@@ -166,25 +167,68 @@ def separate_cameras(results_folder, cameras_folder):
         for file in camera_files:
             create_video(os.path.join(cameras_folder, frame_type, file))
 
-def check_images_for_diff(img1, img2):
-    img1_gray = F.rgb_to_grayscale(img1)
-    img2_gray = F.rgb_to_grayscale(img2)
+def visualize_masks(mask_tensor, mask_latent, path):
+    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
 
-    # --- 3. Calculate Difference using NumPy ---
-    # Squeeze the channel dimension and convert to numpy for calculation
-    arr1 = img1_resized.squeeze().numpy().astype(np.int16)
-    arr2 = img2_resized.squeeze().numpy().astype(np.int16)
+    axs[0].imshow(mask_tensor.squeeze().numpy(), cmap='gray')
+    axs[0].set_title("Original Binary Mask")
+    axs[0].axis("off")
 
-    # Calculate the absolute difference
-    diff = np.abs(arr1 - arr2)
+    axs[1].imshow(mask_latent.squeeze().numpy(), cmap='gray')
+    axs[1].set_title("Downsampled Mask (H//8, W//8)")
+    axs[1].axis("off")
 
-    # Create a binary mask based on the threshold
-    mask = np.where(diff > threshold, 255, 0).astype(np.uint8)
+    plt.tight_layout()
+    plt.savefig(path)
+    
+def load_easi3r_masks(input_path, h, w, t, save_path):
+    easier_mask = Image.open(input_path).convert(
+        "L")
+    to_tensor = transforms.ToTensor()  # Converts to float tensor in range [0, 1]
+    mask_tensor = to_tensor(easier_mask)
+    mask_tensor = 1.0 - mask_tensor # invert to fit with ddim sampling blending
+    mask_tensor = mask_tensor.unsqueeze(0)
+    mask_latent = F.interpolate(
+        mask_tensor,
+        size=(h, w),
+        mode='area'  # 'area' interpolation is robust for downsampling # todo invert
+    )
+    masks_video = mask_latent.unsqueeze(2).repeat(1, 1, t, 1, 1)
+    visualize_masks(mask_tensor, mask_latent, save_path)
 
-    print(f"Successfully created difference mask from tensors. Found {np.sum(mask > 0)} different pixels.")
-    return mask
-    return thresh
+    return masks_video
 
+
+def create_masks(image1, image2, h, w, t, path, threshold=0.1):
+    
+    if image1.max() > 1.0 or image1.min() < 0:
+        print("NORMALIZE=??(=)(")
+        image1 = image1.float() / 255.0
+    if image2.max() > 1.0 or image2.min() < 0:
+        print("NORMALIZE=??(=)(")
+        image2 = image2.float() / 255.0
+
+    img1 = image1.permute(2, 0, 1).unsqueeze(0)  # bchw
+    img2 = image2.permute(2, 0, 1).unsqueeze(0)
+
+    abs_diff = torch.abs(img1 - img2)
+    diff_mask_pixel_space = torch.sum(abs_diff, dim=1, keepdim=True)  # Shape: [1, 1, H, W]
+
+    # Mask is 1.0 where pixels are SIMILAR, 0.0 where they are DIFFERENT
+    mask_pixel_space = (diff_mask_pixel_space < threshold).float()
+
+    mask_latent = F.interpolate(
+        mask_pixel_space,
+        size=(h, w),
+        mode='area'  # 'area' interpolation is robust for downsampling
+    )
+    masks_video = mask_latent.unsqueeze(2).repeat(1, 1, t, 1, 1)
+    visualize_masks(mask_pixel_space, mask_latent, path)
+
+    return masks_video
+
+
+    
 
 def main():
     results_folder = "/home/emmahaidacher/Masterthesis/MasterThesis/good_results/espresso_fixedpose_2cams_60frames_mast3r_sameguidance_det-sampling_temp/results"
@@ -194,7 +238,7 @@ def main():
     # extract_frames(input_vid, output_folder)
     img1 = "/media/emmahaidacher/Volume/GOOD_RESULTS/espresso_1cam_16frames_pickle_deflick_reuse_latent_alpha8/camera_frames/0/00001.png"
     img2 = "/media/emmahaidacher/Volume/GOOD_RESULTS/espresso_1cam_16frames_pickle_deflick_reuse_latent_alpha8/camera_frames/0/00002.png"
-    check_images_for_diff(img1, img2)
+
     #separate_cameras(results_folder, cameras_folder)
 
 if __name__ == "__main__":

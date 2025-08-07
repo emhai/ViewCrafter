@@ -63,4 +63,5 @@ def get_parser():
     parser.add_argument("--n_frames", type=int, default=16, help="num of frames for newly generated videos")
 
 
+
     return parser

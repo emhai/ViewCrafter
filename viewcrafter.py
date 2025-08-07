@@ -52,7 +52,6 @@ class ViewCrafter:
         # initialize ref images, pcd
 
         if self.opts.mode in ['single_video_interp', 'multi_video_interp']:
-            self.first_run = True
             self.guidance_image = None
             self.prev_latent = None
             self.prev_image = None
@@ -136,10 +135,62 @@ class ViewCrafter:
         prompts = [self.opts.prompt]
         videos = (renderings * 2. - 1.).permute(3,0,1,2).unsqueeze(0).to(self.device)
         condition_index = [0]
+
+        if self.run_number == 0: # first run
+            self.guidance_image = self.guidance_image = videos[:, :, condition_index[0]]  # bchw - anchor image/s
+            # todo use all images if there
+            if isinstance(self.img_ori, dict):
+                self.first_image = self.img_ori[0]
+            else:
+                self.first_image = self.img_ori
+
+            complete_mask = None
+        else:
+            prev_image = self.prev_image
+            # todo use all images if there
+            if isinstance(self.img_ori, dict):
+                current_image = self.img_ori[0]
+            else:
+                current_image = self.img_ori
+
+            latent_height, latent_width = self.prev_latent.shape[-2:]
+            mask_save_path = os.path.join(self.opts.save_dir, "latent_masks.png")
+            easier_mask_path = f"/media/emmahaidacher/Volume/GOOD_RESULTS/easi3r/test_espresso_short16f/dynamic_mask_{self.run_number}.png" # todo
+            # masks = create_masks(prev_image, current_image, latent_height, latent_width, self.opts.video_length, mask_save_path)
+            masks = load_easi3r_masks(easier_mask_path, latent_height, latent_width, self.opts.video_length, mask_save_path)
+
+            complete_mask = masks.to(self.device)
+
         with torch.no_grad(), torch.cuda.amp.autocast():
             # [1,1,c,t,h,w]
-            batch_samples = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps, self.opts.ddim_eta, \
-                               self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride, self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale, condition_index)
+            # Original image_guided_synthesis
+            # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
+            #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
+            #                                        self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
+            #                                        condition_index, guidance_image=None, prev_latent=None, first_latent=None, mask=None)
+            #
+            # Use same reference picture for all
+            # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
+            #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
+            #                                        self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
+            #                                        condition_index, guidance_image=self.guidance_image, prev_latent=None, first_latent=None, mask=None)
+            #
+            # Use same reference picture for all and previous_latent blending
+            # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
+            #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
+            #                                        self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
+            #                                        condition_index, guidance_image=self.guidance_image, prev_latent=self.prev_latent, first_latent=None, mask=complete_mask)
+            #
+            # Use same reference picture for all and first_latent blending
+            batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
+                                                   self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
+                                                   self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
+                                                   condition_index, guidance_image=self.guidance_image, prev_latent=None, first_latent=self.first_latent, mask=complete_mask)
+
+            if self.run_number == 0:
+                self.first_latent = current_x0
+
+            self.prev_latent = current_x0
 
             # save_results_seperate(batch_samples[0], self.opts.save_dir, fps=8)
             # torch.Size([1, 3, 25, 576, 1024]) [-1,1]
@@ -592,9 +643,8 @@ class ViewCrafter:
             self.opts.save_dir = original_save_dir # todo necessary?
             end = time.time()
             time_per_frame = (end - start) / 60
-            print("elapsed time: {:.2f}min".format(time_per_frame))
             remaining_time = time_per_frame * (len(all_frames) - int(frame) + 1)
-            print("estimated remaining time: {:.2f}min, {:.2f}h\n".format(remaining_time,
+            print("elapsed time: {:.2f}min, est.remaining time: {:.2f}min, {:.2f}h\n".format(time_per_frame, remaining_time,
                                                                           remaining_time / 60))
             self.run_number = self.run_number + 1
 
@@ -630,8 +680,10 @@ class ViewCrafter:
 
             end = time.time()
             time_per_frame = (end - start) / 60
-            remaining_time = time_per_frame * (len(all_frames) - int(frame))
+            remaining_time = time_per_frame * (len(all_frames) - int(frame) + 1)
             print("elapsed time: {:.2f}min, est. remaining time: {:.2f}min, {:.2f}h\n".format(time_per_frame, remaining_time, remaining_time / 60))
+
+            self.run_number = self.run_number + 1
 
         separate_cameras(results_dir, os.path.join(original_save_dir, SEPERATED_CAMERAS_DIR))
 
