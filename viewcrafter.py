@@ -211,7 +211,7 @@ class ViewCrafter:
 
     def nvs_single_view_v2v(self, gradio=False):
         # 最后一个view为 0 pose
-
+        # todo cleanup
         shape = self.pickle_imgs[self.run_number].shape
         H, W = int(shape[0]), int(shape[1])
 
@@ -275,7 +275,7 @@ class ViewCrafter:
             raise KeyError(f"Invalid Mode: {self.opts.mode}")
 
         render_results, viewmask = self.run_render([pcd[-1]], [imgs[-1]], masks, H, W, camera_traj, num_views)
-        render_results = F.interpolate(render_results.permute(0, 3, 1, 2), size=(768, 1024), mode='bilinear',
+        render_results = F.interpolate(render_results.permute(0, 3, 1, 2), size=(self.opts.height, self.opts.width), mode='bilinear',
                                        align_corners=False).permute(0, 2, 3, 1)
         render_results[0] = self.img_ori
         if self.opts.mode == 'single_view_txt':
@@ -405,6 +405,7 @@ class ViewCrafter:
 
     def nvs_sparse_view_interp_v2v(self):
 
+        # todo cleanup, add easi3r pointclouds?
         c2ws = self.scene.get_im_poses().detach()
         principal_points = self.scene.get_principal_points().detach()
         focals = self.scene.get_focals().detach()
@@ -433,7 +434,7 @@ class ViewCrafter:
         camera_traj, num_views = generate_traj_interp(c2ws, H, W, focals, principal_points, self.opts.video_length,
                                                       self.device)
         render_results, viewmask = self.run_render(pcd, imgs, masks, H, W, camera_traj, num_views)
-        render_results = F.interpolate(render_results.permute(0, 3, 1, 2), size=(576, 1024), mode='bilinear',
+        render_results = F.interpolate(render_results.permute(0, 3, 1, 2), size=(self.opts.height, self.opts.width), mode='bilinear',
                                        align_corners=False).permute(0, 2, 3, 1)
 
         for i in range(len(self.img_ori)):
@@ -615,12 +616,16 @@ class ViewCrafter:
             print("running frame", int(frame) + 1, "/", len(all_frames))
             start = time.time()
 
-            self.opts.image_dir = os.path.join(input_dir, frame)
-            self.opts.save_dir = os.path.join(results_dir, frame)
+            current_input_dir = os.path.join(input_dir, frame)
+            current_result_dir = os.path.join(results_dir, frame)
+
+            self.opts.image_dir = current_input_dir
+            self.opts.save_dir = current_result_dir
 
             os.mkdir(self.opts.save_dir)
             self.images, self.img_ori = self.load_initial_dir(image_dir=self.opts.image_dir)
             self.run_dust3r(input_images=self.images, clean_pc=True)
+
             self.nvs_sparse_view_interp_v2v()
 
             end = time.time()
@@ -679,7 +684,7 @@ class ViewCrafter:
         if len(image_files) < 2:
             raise ValueError("Input views should not less than 2.")
         image_files = sorted(image_files, key=lambda x: int(x.split('/')[-1].split('.')[0]))
-        images = load_images(image_files, size=512,force_1024 = True)
+        images = load_images(image_files, size=512, force_1024 = True, force_height = self.opts.height, force_width = self.opts.width)
 
         img_gts = []
         for i in range(len(image_files)):
