@@ -9,6 +9,7 @@ from PIL import Image
 import torch.nn.functional as F
 import torchvision.transforms as transforms
 from skimage import data, filters
+from torch.ao.nn.quantized.functional import threshold
 from torch.utils.tensorboard.summary import video
 
 from configs.v2v_config import *
@@ -201,7 +202,7 @@ def load_easi3r_masks(input_path, h, w, t, save_path):
     return masks_video
 
 
-def create_masks(current_imgs, prev_imgs, h, w, t, path, threshold=0.1):
+def create_masks(current_imgs, prev_imgs, h, w, t, path, pcd, trajectory_cameras, threshold=0.1):
 
     if not isinstance(current_imgs, list):
         current_imgs = [current_imgs]
@@ -209,6 +210,8 @@ def create_masks(current_imgs, prev_imgs, h, w, t, path, threshold=0.1):
 
     assert len(current_imgs) == len(prev_imgs)
 
+    all_masks = []
+    mask_points_3d = []
     combined_mask = None
     for i in range(len(current_imgs)):
         image1 = current_imgs[i]
@@ -226,24 +229,69 @@ def create_masks(current_imgs, prev_imgs, h, w, t, path, threshold=0.1):
         # Mask is 1.0 where pixels are SIMILAR, 0.0 where they are DIFFERENT
         mask_pixel_space = (diff_mask_pixel_space < threshold).float()
 
-        if combined_mask is None:
-            combined_mask = mask_pixel_space.clone()
-        else:
-            combined_mask = combined_mask * mask_pixel_space
-
+        combined_mask = mask_pixel_space.clone()
+        all_masks.append(mask_pixel_space.clone())
         # combined_mask = combined_mask.clamp(0.0, 1.0)
 
+        h2, w2 = mask_pixel_space.shape[2], mask_pixel_space.shape[3]
+        mask_2d_half = F.interpolate(mask_pixel_space.float(), size=(h2 // 2, w2 // 2), mode='nearest')
+        mask_2d_half = mask_2d_half.squeeze(0).squeeze(0).bool()
+        points = pcd[i].cpu()
+        masked_points = points[mask_2d_half]
+        mask_points_3d.append(masked_points)
 
-    mask_latent = F.interpolate(
-        combined_mask,
-        size=(h, w),
-        mode='area'  # 'area' interpolation is robust for downsampling
-    )
+    combined_points = torch.cat(mask_points_3d, dim=0)
+    H, W = trajectory_cameras.image_size[0].tolist()
+    device = trajectory_cameras.device
+    num_cameras = len(trajectory_cameras) # Should be 16
 
-    masks_video = mask_latent.unsqueeze(2).repeat(1, 1, t, 1, 1)
-    visualize_masks(combined_mask, mask_latent, path)
+    combined_points = combined_points.to(device)
 
-    return masks_video
+    projected_points_screen = trajectory_cameras.transform_points_screen(combined_points)
+
+    new_masks = []
+    # Now, loop through the 16 camera projections
+    for i in range(num_cameras):
+        # Get the projected (x, y) coords for the i-th camera
+        xy_coords = projected_points_screen[i, :, :2]
+        # Get the depth (z) to filter points behind the camera
+        z_depth = projected_points_screen[i, :, 2]
+
+        # --- Filter out points that are not visible ---
+        # 1. Points must be in front of the camera (z > 0)
+        # 2. Points must be within the image boundaries [0, W-1] and [0, H-1]
+        valid_mask = (z_depth > 0) & \
+                     (xy_coords[:, 0] >= 0) & (xy_coords[:, 0] < W) & \
+                     (xy_coords[:, 1] >= 0) & (xy_coords[:, 1] < H)
+
+        # Get the valid coordinates and convert them to integer pixel locations
+        valid_coords = xy_coords[valid_mask].long()
+
+        # --- Create the 2D mask ---
+        # Create an empty black image (mask)
+        mask = torch.zeros((int(H), int(W)), device=device, dtype=torch.float32)
+
+        # "Splat" the points onto the mask. If there are valid points...
+        if valid_coords.shape[0] > 0:
+            # Use the valid pixel coordinates to set mask values to 1.
+            # Note: PyTorch expects (row, col) which corresponds to (y, x)
+            mask[valid_coords[:, 1], valid_coords[:, 0]] = 1.0
+
+        finished_mask = mask.cpu().unsqueeze(0).unsqueeze(0)
+        mask_latent = F.interpolate(
+            finished_mask,
+            size=(h, w),
+            mode='area'  # 'area' interpolation is robust for downsampling
+        )
+
+        mask_latent = (mask_latent > 0.99).float()
+        # masks_video = mask_latent.unsqueeze(2).repeat(1, 1, t, 1, 1)
+        new_masks.append(mask_latent.cpu())
+        visualize_masks(finished_mask, mask_latent, path)
+        print("son")
+
+
+    return None
 
 # https://learnopencv.com/simple-background-estimation-in-videos-using-opencv-c-python/
 def estimate_background(video):

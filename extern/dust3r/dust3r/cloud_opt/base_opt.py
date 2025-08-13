@@ -196,7 +196,7 @@ class BasePCOptimizer (nn.Module):
     def depth_to_pts3d(self,clip_thred=None):
         raise NotImplementedError()
 
-    def get_pts3d(self, raw=False,clip_thred=None):
+    def get_pts3d(self, raw=False, clip_thred=None):
         res = self.depth_to_pts3d(clip_thred)
         if not raw:
             res = [dm[:h*w].view(h, w, 3) for dm, (h, w) in zip(res, self.imshapes)]

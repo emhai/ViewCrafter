@@ -146,7 +146,7 @@ class ViewCrafter:
         return render_results, viewmask
 
     
-    def run_diffusion(self, renderings):
+    def run_diffusion(self, renderings, pcd=None, traj=None):
 
         prompts = [self.opts.prompt]
         videos = (renderings * 2. - 1.).permute(3,0,1,2).unsqueeze(0).to(self.device)
@@ -162,7 +162,7 @@ class ViewCrafter:
             mask_save_path = os.path.join(self.opts.save_dir, "latent_masks.png")
 
             easier_mask_path = f"/media/emmahaidacher/Volume/GOOD_RESULTS/easi3r/test_espresso_short16f/dynamic_mask_{self.run_number}.png"  # todo
-            masks = create_masks(self.first_image, current_image, latent_height, latent_width, self.opts.video_length, mask_save_path) # or with self.prev_image
+            masks = create_masks(self.first_image, current_image, latent_height, latent_width, self.opts.video_length, mask_save_path, pcd=pcd, trajectory_cameras=traj) # or with self.prev_image
             # masks = load_easi3r_masks(easier_mask_path, latent_height, latent_width, self.opts.video_length, mask_save_path)
             complete_mask = masks.to(self.device)
 
@@ -215,7 +215,7 @@ class ViewCrafter:
         radius = depth_avg*self.opts.center_scale #缩放调整
 
         ## change coordinate
-        c2ws,pcd =  world_point_to_obj(poses=c2ws, points=torch.stack(pcd), k=-1, r=radius, elevation=self.opts.elevation, device=self.device)
+        c2ws, pcd =  world_point_to_obj(poses=c2ws, points=torch.stack(pcd), k=-1, r=radius, elevation=self.opts.elevation, device=self.device)
 
         imgs = np.array(self.scene.imgs)
 
@@ -251,7 +251,7 @@ class ViewCrafter:
         else:
             raise KeyError(f"Invalid Mode: {self.opts.mode}")
 
-        render_results, viewmask = self.run_render([pcd[-1]], [imgs[-1]],masks, H, W, camera_traj,num_views)
+        render_results, viewmask = self.run_render([pcd[-1]], [imgs[-1]],masks, H, W, camera_traj, num_views)
         render_results = F.interpolate(render_results.permute(0,3,1,2), size=(576, 1024), mode='bilinear', align_corners=False).permute(0,2,3,1)
         render_results[0] = self.img_ori
         if self.opts.mode == 'single_view_txt':
@@ -343,7 +343,7 @@ class ViewCrafter:
         save_pointcloud_with_normals([imgs[-1]], [pcd[-1]], msk=None,
                                      save_path=os.path.join(self.opts.save_dir, 'pcd.ply'), mask_pc=False,
                                      reduce_pc=False)
-        diffusion_results = self.run_diffusion(render_results)
+        diffusion_results = self.run_diffusion(render_results, pcd, camera_traj)
         save_video((diffusion_results + 1.0) / 2.0, os.path.join(self.opts.save_dir, 'diffusion.mp4'),
                    os.path.join(self.opts.save_dir, DIFFUSION_FRAMES))
 
@@ -506,7 +506,7 @@ class ViewCrafter:
             print(f'Generating clip {i} ...\n')
             diffusion_results.append(self.run_diffusion(render_results[
                                                         i * (self.opts.video_length - 1):self.opts.video_length + i * (
-                                                                    self.opts.video_length - 1)]))
+                                                                    self.opts.video_length - 1)], pcd, camera_traj))
         print(f'Finish!\n')
         diffusion_results = torch.cat(diffusion_results)
         save_video((diffusion_results + 1.0) / 2.0, os.path.join(self.opts.save_dir, f'diffusion.mp4'),
