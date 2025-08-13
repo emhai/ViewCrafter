@@ -159,12 +159,15 @@ class ViewCrafter:
         else:
             current_image = self.img_ori
             latent_height, latent_width = self.prev_latent.shape[-2:] # TODO make nicer
-            mask_save_path = os.path.join(self.opts.save_dir, "latent_masks.png")
+            mask_save_path = os.path.join(self.opts.save_dir, "latent_masks")
 
             easier_mask_path = f"/media/emmahaidacher/Volume/GOOD_RESULTS/easi3r/test_espresso_short16f/dynamic_mask_{self.run_number}.png"  # todo
             masks = create_masks(self.first_image, current_image, latent_height, latent_width, self.opts.video_length, mask_save_path, pcd=pcd, trajectory_cameras=traj) # or with self.prev_image
             # masks = load_easi3r_masks(easier_mask_path, latent_height, latent_width, self.opts.video_length, mask_save_path)
-            complete_mask = masks.to(self.device)
+
+            stacked = torch.stack(masks, dim=2)
+            visualize_stacked_latent_masks(stacked, mask_save_path)
+            complete_mask = stacked.to(self.device)
 
         with torch.no_grad(), torch.cuda.amp.autocast():
             # [1,1,c,t,h,w]

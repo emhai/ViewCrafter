@@ -170,20 +170,111 @@ def separate_cameras(results_folder, cameras_folder):
         for file in camera_files:
             create_video(os.path.join(cameras_folder, frame_type, file))
 
-def visualize_masks(mask_tensor, mask_latent, path):
-    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
 
-    axs[0].imshow(mask_tensor.squeeze().numpy(), cmap='gray')
-    axs[0].set_title("Original Binary Mask")
+def visualize_comparison(img1, img2, diff_mask, static_mask, path):
+    """Visualizes the initial image comparison and mask creation."""
+    fig, axs = plt.subplots(1, 4, figsize=(20, 5))
+
+    axs[0].imshow(img1.permute(1, 2, 0).cpu().numpy())
+    axs[0].set_title("Current Image")
     axs[0].axis("off")
 
-    axs[1].imshow(mask_latent.squeeze().numpy(), cmap='gray')
-    axs[1].set_title("Downsampled Mask (H//8, W//8)")
+    axs[1].imshow(img2.permute(1, 2, 0).cpu().numpy())
+    axs[1].set_title("Previous Image")
+    axs[1].axis("off")
+
+    axs[2].imshow(diff_mask.squeeze().cpu().numpy(), cmap='hot')
+    axs[2].set_title("Pixel Difference (Sum)")
+    axs[2].axis("off")
+
+    axs[3].imshow(static_mask.squeeze().cpu().numpy(), cmap='gray')
+    axs[3].set_title("Static Mask (Similar Pixels)")
+    axs[3].axis("off")
+
+    plt.tight_layout()
+    plt.savefig(path)
+    plt.close(fig)  # Close the figure to free up memory
+
+
+def visualize_reprojection(full_res_mask, latent_mask, path):
+    """Visualizes the final re-projected mask and its downsampled version."""
+    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+
+    # --- CHANGE IS HERE ---
+    # 'gray_r' plots 0.0 as white and 1.0 as black.
+    # This makes sparse points clearly visible on a white background.
+    cmap_to_use = 'gray_r'
+
+    axs[0].imshow(full_res_mask.squeeze().cpu().numpy(), cmap=cmap_to_use)
+    axs[0].set_title("Full-Res Re-projected Mask (Sparse)")
+    axs[0].axis("off")
+
+    axs[1].imshow(latent_mask.squeeze().cpu().numpy(), cmap=cmap_to_use)
+    axs[1].set_title(f"Downsampled Mask ({latent_mask.shape[-2]}x{latent_mask.shape[-1]})")
     axs[1].axis("off")
 
     plt.tight_layout()
     plt.savefig(path)
-    
+    plt.close(fig) # Close the figure to free up memory
+
+
+def visualize_point_cloud(pcd, masked_pcd, path):
+    """Visualizes the original and masked 3D point clouds."""
+    fig = plt.figure(figsize=(12, 6))
+
+    # --- Original Point Cloud ---
+    ax1 = fig.add_subplot(121, projection='3d')
+    points = pcd.cpu().numpy()
+    ax1.scatter(points[:, 0], points[:, 1], points[:, 2], s=0.1, c='blue', label='Original')
+    ax1.set_title("Original Point Cloud")
+    ax1.set_xlabel("X")
+    ax1.set_ylabel("Y")
+    ax1.set_zlabel("Z")
+    ax1.legend()
+
+    # --- Masked Point Cloud ---
+    ax2 = fig.add_subplot(122, projection='3d')
+    masked_points = masked_pcd.cpu().numpy()
+    ax2.scatter(masked_points[:, 0], masked_points[:, 1], masked_points[:, 2], s=0.1, c='red', label='Static')
+    ax2.set_title("Masked (Static) Point Cloud")
+    ax2.set_xlabel("X")
+    ax2.set_ylabel("Y")
+    ax2.set_zlabel("Z")
+    ax2.legend()
+
+    plt.tight_layout()
+    plt.savefig(path)
+    plt.close(fig)
+
+
+def visualize_stacked_latent_masks(stacked_tensor, save_path=None):
+    """Visualize tensor of shape (1, 1, 16, 72, 128)"""
+
+    # Extract the actual data: (1, 1, 16, 72, 128) -> (16, 72, 128)
+    masks_data = stacked_tensor.squeeze(0).squeeze(0)  # Remove batch and channel dims
+
+    # Method 1: Show as grid (2 rows x 8 cols)
+    fig, axes = plt.subplots(2, 8, figsize=(20, 6))
+    axes = axes.flatten()
+
+    for i in range(16):
+        mask_np = masks_data[i].cpu().numpy()  # (72, 128)
+        axes[i].imshow(mask_np, cmap='gray')
+        axes[i].set_title(f'Frame {i + 1}', fontsize=10)
+        axes[i].axis('off')
+
+    plt.tight_layout()
+    plt.suptitle('16 Latent Masks (72x128 each)', y=1.02, fontsize=14)
+
+    if save_path:
+        plt.savefig(os.path.join(save_path, "latents.png"), dpi=150, bbox_inches='tight')
+
+
+
+# --- REFACTORED MAIN FUNCTION ---
+
+
+
 def load_easi3r_masks(input_path, h, w, t, save_path):
     easier_mask = Image.open(input_path).convert(
         "L")
@@ -197,12 +288,13 @@ def load_easi3r_masks(input_path, h, w, t, save_path):
         mode='area'  # 'area' interpolation is robust for downsampling
     )
     masks_video = mask_latent.unsqueeze(2).repeat(1, 1, t, 1, 1)
-    visualize_masks(mask_tensor, mask_latent, save_path)
+    visualize_reprojection(mask_tensor, mask_latent, save_path)
 
     return masks_video
 
 
-def create_masks(current_imgs, prev_imgs, h, w, t, path, pcd, trajectory_cameras, threshold=0.1):
+def create_masks(current_imgs, prev_imgs, h, w, t, output_dir, pcd, trajectory_cameras, threshold=0.1):
+    os.makedirs(output_dir, exist_ok=True) # visualizations
 
     if not isinstance(current_imgs, list):
         current_imgs = [current_imgs]
@@ -229,69 +321,74 @@ def create_masks(current_imgs, prev_imgs, h, w, t, path, pcd, trajectory_cameras
         # Mask is 1.0 where pixels are SIMILAR, 0.0 where they are DIFFERENT
         mask_pixel_space = (diff_mask_pixel_space < threshold).float()
 
-        combined_mask = mask_pixel_space.clone()
-        all_masks.append(mask_pixel_space.clone())
-        # combined_mask = combined_mask.clamp(0.0, 1.0)
+        vis_path_initial = os.path.join(output_dir, f"01_initial_comparison_{i}.png")
+        visualize_comparison(img1.squeeze(0), img2.squeeze(0), diff_mask_pixel_space, mask_pixel_space, vis_path_initial)
 
         h2, w2 = mask_pixel_space.shape[2], mask_pixel_space.shape[3]
         mask_2d_half = F.interpolate(mask_pixel_space.float(), size=(h2 // 2, w2 // 2), mode='nearest')
         mask_2d_half = mask_2d_half.squeeze(0).squeeze(0).bool()
+        mask_2d_half = ~mask_2d_half
         points = pcd[i].cpu()
         masked_points = points[mask_2d_half]
         mask_points_3d.append(masked_points)
+        print(f"  Image Pair {i}: Found {len(masked_points)} static 3D points.")
 
+    # Combine all static points from all image pairs
     combined_points = torch.cat(mask_points_3d, dim=0)
+    print(f"  Total static points collected: {len(combined_points)}")
+
+    vis_path_pcd = os.path.join(output_dir, "02_3d_point_clouds.png")
+    # Assuming the first pcd is representative of the overall structure
+    visualize_point_cloud(pcd[0], combined_points, vis_path_pcd)
+    print(f"  Saved point cloud visualization to {vis_path_pcd}")
+
     H, W = trajectory_cameras.image_size[0].tolist()
     device = trajectory_cameras.device
-    num_cameras = len(trajectory_cameras) # Should be 16
-
+    num_cameras = len(trajectory_cameras)
     combined_points = combined_points.to(device)
 
+    # Project the combined static points onto all camera screens at once
     projected_points_screen = trajectory_cameras.transform_points_screen(combined_points)
 
     new_masks = []
-    # Now, loop through the 16 camera projections
+    print(f"\n--- Step 2: Re-projecting {len(combined_points)} static points onto {num_cameras} camera views ---")
     for i in range(num_cameras):
-        # Get the projected (x, y) coords for the i-th camera
         xy_coords = projected_points_screen[i, :, :2]
-        # Get the depth (z) to filter points behind the camera
         z_depth = projected_points_screen[i, :, 2]
 
-        # --- Filter out points that are not visible ---
-        # 1. Points must be in front of the camera (z > 0)
-        # 2. Points must be within the image boundaries [0, W-1] and [0, H-1]
-        valid_mask = (z_depth > 0) & \
-                     (xy_coords[:, 0] >= 0) & (xy_coords[:, 0] < W) & \
-                     (xy_coords[:, 1] >= 0) & (xy_coords[:, 1] < H)
-
-        # Get the valid coordinates and convert them to integer pixel locations
+        # Filter for points visible in the camera frame
+        valid_mask = (z_depth > 0) & (xy_coords[:, 0] >= 0) & (xy_coords[:, 0] < W) & (xy_coords[:, 1] >= 0) & (
+                    xy_coords[:, 1] < H)
         valid_coords = xy_coords[valid_mask].long()
 
-        # --- Create the 2D mask ---
-        # Create an empty black image (mask)
-        mask = torch.zeros((int(H), int(W)), device=device, dtype=torch.float32)
-
-        # "Splat" the points onto the mask. If there are valid points...
+        # Create the full-resolution mask by "splatting" points
+        full_res_mask = torch.zeros((int(H), int(W)), device=device, dtype=torch.float32)
         if valid_coords.shape[0] > 0:
-            # Use the valid pixel coordinates to set mask values to 1.
-            # Note: PyTorch expects (row, col) which corresponds to (y, x)
-            mask[valid_coords[:, 1], valid_coords[:, 0]] = 1.0
+            full_res_mask[valid_coords[:, 1], valid_coords[:, 0]] = 1.0
 
-        finished_mask = mask.cpu().unsqueeze(0).unsqueeze(0)
+        # Prepare for downsampling
+        finished_mask_bchw = full_res_mask.unsqueeze(0).unsqueeze(0)
+
+        # Downsample using 'area' interpolation
         mask_latent = F.interpolate(
-            finished_mask,
+            finished_mask_bchw,
             size=(h, w),
-            mode='area'  # 'area' interpolation is robust for downsampling
+            mode='area'
         )
 
-        mask_latent = (mask_latent > 0.99).float()
-        # masks_video = mask_latent.unsqueeze(2).repeat(1, 1, t, 1, 1)
+        # [FIXED] The threshold was the main bug. 'area' mode averages pixel values.
+        # If a 64x64 patch (downsampling from 512->8) contains just one white pixel,
+        # the average is 1/4096. A threshold of > 0.99 is impossible.
+        # A threshold of > 0.0 means "keep this latent pixel if ANY part of it was masked".
+        mask_latent = (mask_latent > 0.0).float()
+        mask_latent = 1 - mask_latent
         new_masks.append(mask_latent.cpu())
-        visualize_masks(finished_mask, mask_latent, path)
-        print("son")
 
+        vis_path_reproj = os.path.join(output_dir, f"03_reprojected_mask_cam_{i:02d}.png")
+        visualize_reprojection(full_res_mask, mask_latent, vis_path_reproj)
+        print(f"  Camera {i}: Re-projected {valid_coords.shape[0]} points. Visualization saved to {vis_path_reproj}")
 
-    return None
+    return new_masks
 
 # https://learnopencv.com/simple-background-estimation-in-videos-using-opencv-c-python/
 def estimate_background(video):
