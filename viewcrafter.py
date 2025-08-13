@@ -52,6 +52,8 @@ class ViewCrafter:
         # initialize ref images, pcd
 
         if self.opts.mode in ['single_video_interp', 'multi_video_interp']:
+            self.predicted_poses = None
+            self.predicted_focals = None
             self.guidance_image = None
             self.prev_latent = None
             self.prev_image = None
@@ -90,8 +92,22 @@ class ViewCrafter:
 
         mode = GlobalAlignerMode.PointCloudOptimizer #if len(self.images) > 2 else GlobalAlignerMode.PairViewer
         scene = global_aligner(output, device=self.device, mode=mode)
+
+        if self.predicted_poses is not None:
+            print("Found predicted camera poses")
+            scene.preset_pose(self.predicted_poses)
+            scene.preset_focal(self.predicted_focals)
+            init_string = "known_poses"
+        else:
+            init_string = "mst"
+
         if mode == GlobalAlignerMode.PointCloudOptimizer:
-            loss = scene.compute_global_alignment(init='mst', niter=self.opts.niter, schedule=self.opts.schedule, lr=self.opts.lr)
+            loss = scene.compute_global_alignment(init=init_string, niter=self.opts.niter, schedule=self.opts.schedule, lr=self.opts.lr)
+
+        if self.predicted_poses is None:
+            print("Saving predicted camera poses")
+            self.predicted_poses = scene.get_im_poses().detach().cpu()
+            self.predicted_focals = scene.get_focals().detach().cpu()
 
         if clean_pc:
             self.scene = scene.clean_pointcloud()
@@ -138,27 +154,16 @@ class ViewCrafter:
 
         if self.run_number == 0: # first run
             self.guidance_image = self.guidance_image = videos[:, :, condition_index[0]]  # bchw - anchor image/s
-            # todo use all images if there
-            if isinstance(self.img_ori, dict):
-                self.first_image = self.img_ori[0]
-            else:
-                self.first_image = self.img_ori
-
+            self.first_image = self.img_ori
             complete_mask = None
         else:
-            prev_image = self.prev_image
-            # todo use all images if there
-            if isinstance(self.img_ori, dict):
-                current_image = self.img_ori[0]
-            else:
-                current_image = self.img_ori
-
-            latent_height, latent_width = self.prev_latent.shape[-2:]
+            current_image = self.img_ori
+            latent_height, latent_width = self.prev_latent.shape[-2:] # TODO make nicer
             mask_save_path = os.path.join(self.opts.save_dir, "latent_masks.png")
-            easier_mask_path = f"/media/emmahaidacher/Volume/GOOD_RESULTS/easi3r/test_espresso_short16f/dynamic_mask_{self.run_number}.png" # todo
-            # masks = create_masks(prev_image, current_image, latent_height, latent_width, self.opts.video_length, mask_save_path)
-            masks = load_easi3r_masks(easier_mask_path, latent_height, latent_width, self.opts.video_length, mask_save_path)
 
+            easier_mask_path = f"/media/emmahaidacher/Volume/GOOD_RESULTS/easi3r/test_espresso_short16f/dynamic_mask_{self.run_number}.png"  # todo
+            masks = create_masks(self.first_image, current_image, latent_height, latent_width, self.opts.video_length, mask_save_path) # or with self.prev_image
+            # masks = load_easi3r_masks(easier_mask_path, latent_height, latent_width, self.opts.video_length, mask_save_path)
             complete_mask = masks.to(self.device)
 
         with torch.no_grad(), torch.cuda.amp.autocast():
@@ -643,7 +648,7 @@ class ViewCrafter:
             self.opts.save_dir = original_save_dir # todo necessary?
             end = time.time()
             time_per_frame = (end - start) / 60
-            remaining_time = time_per_frame * (len(all_frames) - int(frame) + 1)
+            remaining_time = time_per_frame * (len(all_frames) - int(frame) -1)
             print("elapsed time: {:.2f}min, est.remaining time: {:.2f}min, {:.2f}h\n".format(time_per_frame, remaining_time,
                                                                           remaining_time / 60))
             self.run_number = self.run_number + 1
@@ -663,7 +668,7 @@ class ViewCrafter:
 
         print(all_frames)
         for frame in all_frames:
-            print("running frame", int(frame) + 1, "/", len(all_frames))
+            print("running frame", int(frame) + 1, "/", len(all_frames), "run_no: ", self.run_number)
             start = time.time()
 
             current_input_dir = os.path.join(input_dir, frame)
@@ -680,7 +685,7 @@ class ViewCrafter:
 
             end = time.time()
             time_per_frame = (end - start) / 60
-            remaining_time = time_per_frame * (len(all_frames) - int(frame) + 1)
+            remaining_time = time_per_frame * (len(all_frames) - int(frame) - 1)
             print("elapsed time: {:.2f}min, est. remaining time: {:.2f}min, {:.2f}h\n".format(time_per_frame, remaining_time, remaining_time / 60))
 
             self.run_number = self.run_number + 1

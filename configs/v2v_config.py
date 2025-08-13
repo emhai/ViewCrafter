@@ -12,7 +12,7 @@ RENDER_FRAMES = "render_frames"         # in cameras, stitched together render f
 DEPTHS_DIR = "depths"                   # for depth images as estimated per dust3r
 MASKS_DIR = "masks"                     # masks folder
 
-PREDICTED_CAMERA_POSES_FILE = "test_camera_poses.pt"
+PREDICTED_CAMERA_POSES_FILE = "test_camera_poses.pt" # todo
 PREDICTED_FOCALS_FILE = "test_focals_poses.pt"
 
 GUIDANCE_DIR = "guidance"

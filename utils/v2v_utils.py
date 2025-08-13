@@ -8,6 +8,8 @@ import torch
 from PIL import Image
 import torch.nn.functional as F
 import torchvision.transforms as transforms
+from skimage import data, filters
+from torch.utils.tensorboard.summary import video
 
 from configs.v2v_config import *
 
@@ -191,7 +193,7 @@ def load_easi3r_masks(input_path, h, w, t, save_path):
     mask_latent = F.interpolate(
         mask_tensor,
         size=(h, w),
-        mode='area'  # 'area' interpolation is robust for downsampling # todo invert
+        mode='area'  # 'area' interpolation is robust for downsampling
     )
     masks_video = mask_latent.unsqueeze(2).repeat(1, 1, t, 1, 1)
     visualize_masks(mask_tensor, mask_latent, save_path)
@@ -199,36 +201,65 @@ def load_easi3r_masks(input_path, h, w, t, save_path):
     return masks_video
 
 
-def create_masks(image1, image2, h, w, t, path, threshold=0.1):
-    
-    if image1.max() > 1.0 or image1.min() < 0:
-        print("NORMALIZE=??(=)(")
-        image1 = image1.float() / 255.0
-    if image2.max() > 1.0 or image2.min() < 0:
-        print("NORMALIZE=??(=)(")
-        image2 = image2.float() / 255.0
+def create_masks(current_imgs, prev_imgs, h, w, t, path, threshold=0.1):
 
-    img1 = image1.permute(2, 0, 1).unsqueeze(0)  # bchw
-    img2 = image2.permute(2, 0, 1).unsqueeze(0)
+    if not isinstance(current_imgs, list):
+        current_imgs = [current_imgs]
+        prev_imgs = [prev_imgs]
 
-    abs_diff = torch.abs(img1 - img2)
-    diff_mask_pixel_space = torch.sum(abs_diff, dim=1, keepdim=True)  # Shape: [1, 1, H, W]
+    assert len(current_imgs) == len(prev_imgs)
 
-    # Mask is 1.0 where pixels are SIMILAR, 0.0 where they are DIFFERENT
-    mask_pixel_space = (diff_mask_pixel_space < threshold).float()
+    combined_mask = None
+    for i in range(len(current_imgs)):
+        image1 = current_imgs[i]
+        image2 = prev_imgs[i]
+
+        assert image1.max() <= 1.0 and image1.min() >= 0
+        assert image2.max() <= 1.0 and image2.min() >= 0
+
+        img1 = image1.permute(2, 0, 1).unsqueeze(0)  # bchw
+        img2 = image2.permute(2, 0, 1).unsqueeze(0)
+
+        abs_diff = torch.abs(img1 - img2)
+        diff_mask_pixel_space = torch.sum(abs_diff, dim=1, keepdim=True)  # Shape: [1, 1, H, W]
+
+        # Mask is 1.0 where pixels are SIMILAR, 0.0 where they are DIFFERENT
+        mask_pixel_space = (diff_mask_pixel_space < threshold).float()
+
+        if combined_mask is None:
+            combined_mask = mask_pixel_space.clone()
+        else:
+            combined_mask = combined_mask * mask_pixel_space
+
+        # combined_mask = combined_mask.clamp(0.0, 1.0)
+
 
     mask_latent = F.interpolate(
-        mask_pixel_space,
+        combined_mask,
         size=(h, w),
         mode='area'  # 'area' interpolation is robust for downsampling
     )
+
     masks_video = mask_latent.unsqueeze(2).repeat(1, 1, t, 1, 1)
-    visualize_masks(mask_pixel_space, mask_latent, path)
+    visualize_masks(combined_mask, mask_latent, path)
 
     return masks_video
 
+# https://learnopencv.com/simple-background-estimation-in-videos-using-opencv-c-python/
+def estimate_background(video):
+    frames = []
+    cap = cv2.VideoCapture(video)
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        frames.append(frame)
+    cap.release()
 
-    
+    background = np.median(frames, axis=0).astype(np.uint8)
+
+    cv2.imwrite('/media/emmahaidacher/Volume/TESTS/bg.jpg', background)
+
 
 def main():
     results_folder = "/home/emmahaidacher/Masterthesis/MasterThesis/good_results/espresso_fixedpose_2cams_60frames_mast3r_sameguidance_det-sampling_temp/results"
@@ -238,7 +269,8 @@ def main():
     # extract_frames(input_vid, output_folder)
     img1 = "/media/emmahaidacher/Volume/GOOD_RESULTS/espresso_1cam_16frames_pickle_deflick_reuse_latent_alpha8/camera_frames/0/00001.png"
     img2 = "/media/emmahaidacher/Volume/GOOD_RESULTS/espresso_1cam_16frames_pickle_deflick_reuse_latent_alpha8/camera_frames/0/00002.png"
-
+    vid = "/media/emmahaidacher/Volume/DATASETS/INTERNET/espresso_short/1_video_short/0.mp4"
+    estimate_background(vid)
     #separate_cameras(results_folder, cameras_folder)
 
 if __name__ == "__main__":

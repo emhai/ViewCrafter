@@ -12,8 +12,15 @@ if __name__=="__main__":
     if opts.exp_name == None:
         prefix = datetime.now().strftime("%Y%m%d_%H%M")
         opts.exp_name = f'{prefix}_{os.path.splitext(os.path.basename(opts.image_dir))[0]}'
+
     opts.save_dir = os.path.join(opts.out_dir,opts.exp_name)
-    os.makedirs(opts.save_dir,exist_ok=True)
+
+    if os.path.exists(opts.save_dir):
+        prefix = datetime.now().strftime("%Y%m%d_%H%M")
+        opts.exp_name = f'{prefix}_{opts.exp_name}'
+        opts.save_dir = os.path.join(opts.out_dir, opts.exp_name)
+
+    os.makedirs(opts.save_dir,exist_ok=True)# todo exist not okay
 
     args_dict = vars(opts)
     with open(os.path.join(opts.save_dir, 'args.json'), 'w') as f:
