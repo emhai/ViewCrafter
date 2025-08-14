@@ -44,6 +44,7 @@ class ViewCrafter:
         self.device = opts.device
 
         if self.opts.use_mast3r:
+            print("USING MAST3R")
             self.setup_mast3r()
         else:
             self.setup_dust3r()
@@ -159,15 +160,13 @@ class ViewCrafter:
         else:
             current_image = self.img_ori
             latent_height, latent_width = self.prev_latent.shape[-2:] # TODO make nicer
-            mask_save_path = os.path.join(self.opts.save_dir, "latent_masks")
+            mask_save_path = os.path.join(self.opts.save_dir, MASKS_DIR)
 
             easier_mask_path = f"/media/emmahaidacher/Volume/GOOD_RESULTS/easi3r/test_espresso_short16f/dynamic_mask_{self.run_number}.png"  # todo
-            masks = create_masks(self.first_image, current_image, latent_height, latent_width, self.opts.video_length, mask_save_path, pcd=pcd, trajectory_cameras=traj) # or with self.prev_image
-            # masks = load_easi3r_masks(easier_mask_path, latent_height, latent_width, self.opts.video_length, mask_save_path)
-
-            stacked = torch.stack(masks, dim=2)
-            visualize_stacked_latent_masks(stacked, mask_save_path)
-            complete_mask = stacked.to(self.device)
+            diff_masks = create_frame_diff_masks(self.first_image, current_image, output_dir=mask_save_path) # or with self.prev_image
+            eas_masks = load_easi3r_masks(easier_mask_path, current_image, mask_save_path)
+            print("done")
+            complete_mask = diff_masks + eas_masks
 
         with torch.no_grad(), torch.cuda.amp.autocast():
             # [1,1,c,t,h,w]
@@ -346,7 +345,7 @@ class ViewCrafter:
         save_pointcloud_with_normals([imgs[-1]], [pcd[-1]], msk=None,
                                      save_path=os.path.join(self.opts.save_dir, 'pcd.ply'), mask_pc=False,
                                      reduce_pc=False)
-        diffusion_results = self.run_diffusion(render_results, pcd, camera_traj)
+        diffusion_results = self.run_diffusion(render_results, [pcd[-1]], camera_traj)
         save_video((diffusion_results + 1.0) / 2.0, os.path.join(self.opts.save_dir, 'diffusion.mp4'),
                    os.path.join(self.opts.save_dir, DIFFUSION_FRAMES))
 
@@ -626,10 +625,9 @@ class ViewCrafter:
         input_dir = os.path.join(original_save_dir, INPUTS_DIR) # all inputs
         results_dir = os.path.join(original_save_dir, RESULTS_DIR) # all results
         all_frames = sorted(os.listdir(input_dir), key=lambda x: int(os.path.splitext(x)[0]))
-        all_frames = all_frames[:16]
-        # UNCOMMENT IF EXECUTION FAILED for all frames. if you do this, comment out setup_structure()
-        # or if only frames 0-16 should be processed e.g.
-        self.opts.mode = 'single_view_txt' # necessary for inner functions - txt needs to be provided
+        all_frames = all_frames[:self.opts.n_frames]
+
+        self.opts.mode = 'single_view_txt' # necessary for inner functions - txt needs to be provided todo also different kinds possible
 
         print(all_frames)
         for frame in all_frames:
@@ -648,7 +646,6 @@ class ViewCrafter:
 
             self.nvs_single_view_v2v()
 
-            self.opts.save_dir = original_save_dir # todo necessary?
             end = time.time()
             time_per_frame = (end - start) / 60
             remaining_time = time_per_frame * (len(all_frames) - int(frame) -1)
@@ -656,8 +653,8 @@ class ViewCrafter:
                                                                           remaining_time / 60))
             self.run_number = self.run_number + 1
 
-        separate_cameras(os.path.join(self.opts.save_dir, RESULTS_DIR),
-                         os.path.join(self.opts.save_dir, SEPERATED_CAMERAS_DIR))
+        separate_cameras(os.path.join(original_save_dir, RESULTS_DIR),
+                         os.path.join(original_save_dir, SEPERATED_CAMERAS_DIR))
 
     def run_multi_video_interp(self):
         original_save_dir = self.opts.save_dir
@@ -665,9 +662,6 @@ class ViewCrafter:
         results_dir = os.path.join(original_save_dir, RESULTS_DIR)
         all_frames = sorted(os.listdir(input_dir), key=lambda x: int(os.path.splitext(x)[0]))
         all_frames = all_frames[:self.opts.n_frames] # todo assert that n_frames < input_vid_frames
-
-        # UNCOMMENT IF EXECUTION FAILED for all frames. if you do this, comment out setup_structure()
-        # or if only frames 0-16 should be processed e.g.
 
         print(all_frames)
         for frame in all_frames:
@@ -695,7 +689,6 @@ class ViewCrafter:
 
         separate_cameras(results_dir, os.path.join(original_save_dir, SEPERATED_CAMERAS_DIR))
 
-
     def setup_diffusion(self):
         seed_everything(self.opts.seed)
 
@@ -719,10 +712,12 @@ class ViewCrafter:
         self.noise_shape = [self.opts.bs, channels, n_frames, h, w]
 
     def setup_dust3r(self):
+        assert "DUSt3R" in self.opts.model_path
         self.dust3r = load_model(self.opts.model_path, self.device)
 
     def setup_mast3r(self):
-        self.mast3r = AsymmetricMASt3R.from_pretrained(self.opts.model_path).to(self.device)
+        assert "MASt3R" in self.opts.model_path
+        self.dust3r = AsymmetricMASt3R.from_pretrained(self.opts.model_path).to(self.device)
 
     def load_initial_images(self, image_dir):
         ## load images

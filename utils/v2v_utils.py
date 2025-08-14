@@ -15,6 +15,8 @@ from torch.utils.tensorboard.summary import video
 from configs.v2v_config import *
 
 import matplotlib.pyplot as plt
+from utils.pvd_utils import save_pointcloud_with_normals, get_pc
+
 
 def save_masks(mask_list, save_dir, visualize=True, save=True):
     os.makedirs(save_dir)
@@ -171,130 +173,61 @@ def separate_cameras(results_folder, cameras_folder):
             create_video(os.path.join(cameras_folder, frame_type, file))
 
 
-def visualize_comparison(img1, img2, diff_mask, static_mask, path):
-    """Visualizes the initial image comparison and mask creation."""
-    fig, axs = plt.subplots(1, 4, figsize=(20, 5))
+def visualize_reprojection(full_res_mask, image, path):
+    fig, axs = plt.subplots(1, 3, figsize=(15, 5))
 
-    axs[0].imshow(img1.permute(1, 2, 0).cpu().numpy())
-    axs[0].set_title("Current Image")
+    axs[0].imshow(image.numpy())
+    axs[0].set_title("Original image")
     axs[0].axis("off")
 
-    axs[1].imshow(img2.permute(1, 2, 0).cpu().numpy())
-    axs[1].set_title("Previous Image")
+    axs[1].imshow(full_res_mask.squeeze().numpy(), cmap='gray')
+    axs[1].set_title(f"Diff Mask")
     axs[1].axis("off")
 
-    axs[2].imshow(diff_mask.squeeze().cpu().numpy(), cmap='hot')
-    axs[2].set_title("Pixel Difference (Sum)")
-    axs[2].axis("off")
+    mask_resized = F.interpolate(full_res_mask, size=(image.shape[0], image.shape[1]), mode='nearest')  # shape: (1,1,768,1024)
 
-    axs[3].imshow(static_mask.squeeze().cpu().numpy(), cmap='gray')
-    axs[3].set_title("Static Mask (Similar Pixels)")
-    axs[3].axis("off")
-
-    plt.tight_layout()
-    plt.savefig(path)
-    plt.close(fig)  # Close the figure to free up memory
-
-
-def visualize_reprojection(full_res_mask, latent_mask, path):
-    """Visualizes the final re-projected mask and its downsampled version."""
-    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-
-    # --- CHANGE IS HERE ---
-    # 'gray_r' plots 0.0 as white and 1.0 as black.
-    # This makes sparse points clearly visible on a white background.
-    cmap_to_use = 'gray_r'
-
-    axs[0].imshow(full_res_mask.squeeze().cpu().numpy(), cmap=cmap_to_use)
-    axs[0].set_title("Full-Res Re-projected Mask (Sparse)")
-    axs[0].axis("off")
-
-    axs[1].imshow(latent_mask.squeeze().cpu().numpy(), cmap=cmap_to_use)
-    axs[1].set_title(f"Downsampled Mask ({latent_mask.shape[-2]}x{latent_mask.shape[-1]})")
-    axs[1].axis("off")
-
-    plt.tight_layout()
-    plt.savefig(path)
-    plt.close(fig) # Close the figure to free up memory
-
-
-def visualize_point_cloud(pcd, masked_pcd, path):
-    """Visualizes the original and masked 3D point clouds."""
-    fig = plt.figure(figsize=(12, 6))
-
-    # --- Original Point Cloud ---
-    ax1 = fig.add_subplot(121, projection='3d')
-    points = pcd.cpu().numpy()
-    ax1.scatter(points[:, 0], points[:, 1], points[:, 2], s=0.1, c='blue', label='Original')
-    ax1.set_title("Original Point Cloud")
-    ax1.set_xlabel("X")
-    ax1.set_ylabel("Y")
-    ax1.set_zlabel("Z")
-    ax1.legend()
-
-    # --- Masked Point Cloud ---
-    ax2 = fig.add_subplot(122, projection='3d')
-    masked_points = masked_pcd.cpu().numpy()
-    ax2.scatter(masked_points[:, 0], masked_points[:, 1], masked_points[:, 2], s=0.1, c='red', label='Static')
-    ax2.set_title("Masked (Static) Point Cloud")
-    ax2.set_xlabel("X")
-    ax2.set_ylabel("Y")
-    ax2.set_zlabel("Z")
-    ax2.legend()
+    # Step 2 — squeeze to H,W
+    mask_2d = mask_resized.squeeze() # shape: (768,1024)
+    axs[2].imshow(image.numpy())  # original image
+    axs[2].imshow(mask_2d, cmap='Reds_r', alpha=0.5)  # transparent red mask
+    axs[2].axis('off')
 
     plt.tight_layout()
     plt.savefig(path)
     plt.close(fig)
 
+def load_easi3r_masks(input_paths, current_imgs, output_dir=None):
 
-def visualize_stacked_latent_masks(stacked_tensor, save_path=None):
-    """Visualize tensor of shape (1, 1, 16, 72, 128)"""
+    # creates masks of shape (1, 1, H /2, W/2) # same dim as point cloud created by dust3r
+    if not isinstance(input_paths, list):
+        input_paths = [input_paths]
+        current_imgs = [current_imgs]
 
-    # Extract the actual data: (1, 1, 16, 72, 128) -> (16, 72, 128)
-    masks_data = stacked_tensor.squeeze(0).squeeze(0)  # Remove batch and channel dims
+    assert len(input_paths) == len(current_imgs)
 
-    # Method 1: Show as grid (2 rows x 8 cols)
-    fig, axes = plt.subplots(2, 8, figsize=(20, 6))
-    axes = axes.flatten()
+    all_masks = []
+    for i in range(len(input_paths)):
 
-    for i in range(16):
-        mask_np = masks_data[i].cpu().numpy()  # (72, 128)
-        axes[i].imshow(mask_np, cmap='gray')
-        axes[i].set_title(f'Frame {i + 1}', fontsize=10)
-        axes[i].axis('off')
+        easier_mask = Image.open(input_paths[i]).convert("L")
+        to_tensor = transforms.ToTensor()  # Converts to float tensor in range [0, 1]
+        mask_tensor = to_tensor(easier_mask)
+        mask_tensor = 1.0 - mask_tensor # invert to fit with ddim sampling blending
+        mask_tensor = mask_tensor.unsqueeze(0)
+        print(mask_tensor.shape)
+        all_masks.append(mask_tensor)
 
-    plt.tight_layout()
-    plt.suptitle('16 Latent Masks (72x128 each)', y=1.02, fontsize=14)
+    if output_dir is not None:
+        if not os.path.isdir(output_dir):
+            os.makedirs(output_dir)
 
-    if save_path:
-        plt.savefig(os.path.join(save_path, "latents.png"), dpi=150, bbox_inches='tight')
+        for i in range(len(all_masks)):
+            visualize_reprojection(all_masks[i], current_imgs[i], os.path.join(output_dir, f"easi3r_mask_{i}.png"))
 
-
-
-# --- REFACTORED MAIN FUNCTION ---
-
-
-
-def load_easi3r_masks(input_path, h, w, t, save_path):
-    easier_mask = Image.open(input_path).convert(
-        "L")
-    to_tensor = transforms.ToTensor()  # Converts to float tensor in range [0, 1]
-    mask_tensor = to_tensor(easier_mask)
-    mask_tensor = 1.0 - mask_tensor # invert to fit with ddim sampling blending
-    mask_tensor = mask_tensor.unsqueeze(0)
-    mask_latent = F.interpolate(
-        mask_tensor,
-        size=(h, w),
-        mode='area'  # 'area' interpolation is robust for downsampling
-    )
-    masks_video = mask_latent.unsqueeze(2).repeat(1, 1, t, 1, 1)
-    visualize_reprojection(mask_tensor, mask_latent, save_path)
-
-    return masks_video
+    return all_masks
 
 
-def create_masks(current_imgs, prev_imgs, h, w, t, output_dir, pcd, trajectory_cameras, threshold=0.1):
-    os.makedirs(output_dir, exist_ok=True) # visualizations
+def create_frame_diff_masks(current_imgs, prev_imgs, threshold=0.1, output_dir=None):
+    # creates masks of shape (1, 1, H /2, W/2) # same dim as point cloud created by dust3r
 
     if not isinstance(current_imgs, list):
         current_imgs = [current_imgs]
@@ -303,8 +236,7 @@ def create_masks(current_imgs, prev_imgs, h, w, t, output_dir, pcd, trajectory_c
     assert len(current_imgs) == len(prev_imgs)
 
     all_masks = []
-    mask_points_3d = []
-    combined_mask = None
+
     for i in range(len(current_imgs)):
         image1 = current_imgs[i]
         image2 = prev_imgs[i]
@@ -318,77 +250,120 @@ def create_masks(current_imgs, prev_imgs, h, w, t, output_dir, pcd, trajectory_c
         abs_diff = torch.abs(img1 - img2)
         diff_mask_pixel_space = torch.sum(abs_diff, dim=1, keepdim=True)  # Shape: [1, 1, H, W]
 
-        # Mask is 1.0 where pixels are SIMILAR, 0.0 where they are DIFFERENT
+        # Mask is 1.0 where pixels are similar, 0.0 where they are different
         mask_pixel_space = (diff_mask_pixel_space < threshold).float()
-
-        vis_path_initial = os.path.join(output_dir, f"01_initial_comparison_{i}.png")
-        visualize_comparison(img1.squeeze(0), img2.squeeze(0), diff_mask_pixel_space, mask_pixel_space, vis_path_initial)
-
         h2, w2 = mask_pixel_space.shape[2], mask_pixel_space.shape[3]
-        mask_2d_half = F.interpolate(mask_pixel_space.float(), size=(h2 // 2, w2 // 2), mode='nearest')
-        mask_2d_half = mask_2d_half.squeeze(0).squeeze(0).bool()
-        mask_2d_half = ~mask_2d_half
-        points = pcd[i].cpu()
-        masked_points = points[mask_2d_half]
-        mask_points_3d.append(masked_points)
-        print(f"  Image Pair {i}: Found {len(masked_points)} static 3D points.")
+        mask_pixel_space_half = F.interpolate(mask_pixel_space.float(), size=(h2 // 2, w2 // 2),
+                                     mode='nearest')  # get to same dim as pc
+        print(mask_pixel_space_half.shape)
+        all_masks.append(mask_pixel_space_half)
 
-    # Combine all static points from all image pairs
-    combined_points = torch.cat(mask_points_3d, dim=0)
-    print(f"  Total static points collected: {len(combined_points)}")
+    if output_dir is not None:
+        if not os.path.isdir(output_dir):
+            os.makedirs(output_dir)
 
-    vis_path_pcd = os.path.join(output_dir, "02_3d_point_clouds.png")
-    # Assuming the first pcd is representative of the overall structure
-    visualize_point_cloud(pcd[0], combined_points, vis_path_pcd)
-    print(f"  Saved point cloud visualization to {vis_path_pcd}")
+        for i in range(len(all_masks)):
+            visualize_reprojection(all_masks[i], current_imgs[i], os.path.join(output_dir, f"pixel_diffs_{i}.png"))
 
-    H, W = trajectory_cameras.image_size[0].tolist()
-    device = trajectory_cameras.device
-    num_cameras = len(trajectory_cameras)
-    combined_points = combined_points.to(device)
+    return all_masks
 
-    # Project the combined static points onto all camera screens at once
-    projected_points_screen = trajectory_cameras.transform_points_screen(combined_points)
+def draw_mask(image, mask_generated, save_path=None) :
+    masked_image = image.copy()
 
-    new_masks = []
-    print(f"\n--- Step 2: Re-projecting {len(combined_points)} static points onto {num_cameras} camera views ---")
-    for i in range(num_cameras):
-        xy_coords = projected_points_screen[i, :, :2]
-        z_depth = projected_points_screen[i, :, 2]
+    masked_image = np.where(mask_generated.astype(int),
+                          np.array([0,255,0], dtype='uint8'),
+                          masked_image)
 
-        # Filter for points visible in the camera frame
-        valid_mask = (z_depth > 0) & (xy_coords[:, 0] >= 0) & (xy_coords[:, 0] < W) & (xy_coords[:, 1] >= 0) & (
-                    xy_coords[:, 1] < H)
-        valid_coords = xy_coords[valid_mask].long()
+    masked_image = masked_image.astype(np.uint8)
 
-        # Create the full-resolution mask by "splatting" points
-        full_res_mask = torch.zeros((int(H), int(W)), device=device, dtype=torch.float32)
-        if valid_coords.shape[0] > 0:
-            full_res_mask[valid_coords[:, 1], valid_coords[:, 0]] = 1.0
+    opaque_masked_image = cv2.addWeighted(image, 0.3, masked_image, 0.7, 0)
 
-        # Prepare for downsampling
-        finished_mask_bchw = full_res_mask.unsqueeze(0).unsqueeze(0)
+    if save_path is not None:
+        cv2.imwrite(os.path.join(save_path, "opaque_mask.jpg"), opaque_masked_image)
 
-        # Downsample using 'area' interpolation
-        mask_latent = F.interpolate(
-            finished_mask_bchw,
-            size=(h, w),
-            mode='area'
-        )
+    return opaque_masked_image
 
-        # [FIXED] The threshold was the main bug. 'area' mode averages pixel values.
-        # If a 64x64 patch (downsampling from 512->8) contains just one white pixel,
-        # the average is 1/4096. A threshold of > 0.99 is impossible.
-        # A threshold of > 0.0 means "keep this latent pixel if ANY part of it was masked".
-        mask_latent = (mask_latent > 0.0).float()
-        mask_latent = 1 - mask_latent
-        new_masks.append(mask_latent.cpu())
 
-        vis_path_reproj = os.path.join(output_dir, f"03_reprojected_mask_cam_{i:02d}.png")
-        visualize_reprojection(full_res_mask, mask_latent, vis_path_reproj)
-        print(f"  Camera {i}: Re-projected {valid_coords.shape[0]} points. Visualization saved to {vis_path_reproj}")
 
-    return new_masks
+def get_masked_pointcloud(imgs, masks, pcd, output_dir=None):
+
+    if output_dir is not None:
+        if not os.path.isdir(output_dir):
+            os.makedirs(output_dir)
+        # visualize_masks(all_masks, os.path.join(output_dir, "pixel_diffs.png"))
+
+    get_pc(imgs, pcd, masks, mask_pc=True)
+
+    return pts
+
+def interpolate_masks(masks, pcd, traj, output_dir=None):
+
+    if output_dir is not None:
+        if not os.path.isdir(output_dir):
+            os.makedirs(output_dir)
+        # visualize_masks(all_masks, os.path.join(output_dir, "pixel_diffs.png"))
+
+    assert len(masks) == len(pcd)
+
+    # h2, w2 = mask_pixel_space.shape[2], mask_pixel_space.shape[3]
+    # mask_2d_half = F.interpolate(mask_pixel_space.float(), size=(h2 // 2, w2 // 2),
+    #                              mode='nearest')  # get to same dim as pc
+    # mask_2d_half = mask_2d_half.squeeze(0).squeeze(0).bool()
+    # mask_2d_half = ~mask_2d_half
+    # points = pcd[i].cpu()
+    # masked_points = points[mask_2d_half]
+    # mask_points_3d.append(masked_points)
+    #
+    # # Combine all static points from all image pairs
+    # combined_points = torch.cat(mask_points_3d, dim=0)
+    # print(f"  Total static points collected: {len(combined_points)}")
+    #
+    # vis_path_pcd = os.path.join(output_dir, "02_3d_point_clouds.png")
+    # # Assuming the first pcd is representative of the overall structure
+    # #visualize_point_cloud(pcd[0], combined_points, vis_path_pcd)
+    # print(f"  Saved point cloud visualization to {vis_path_pcd}")
+    #
+    # H, W = trajectory_cameras.image_size[0].tolist()
+    # device = trajectory_cameras.device
+    # num_cameras = len(trajectory_cameras)
+    # combined_points = combined_points.to(device)
+    #
+    # # Project the combined static points onto all camera screens at once
+    # projected_points_screen = trajectory_cameras.transform_points_screen(combined_points)
+    #
+    # new_masks = []
+    # print(f"\n--- Step 2: Re-projecting {len(combined_points)} static points onto {num_cameras} camera views ---")
+    # for i in range(num_cameras):
+    #     xy_coords = projected_points_screen[i, :, :2]
+    #     z_depth = projected_points_screen[i, :, 2]
+    #
+    #     # Filter for points visible in the camera frame
+    #     valid_mask = (z_depth > 0) & (xy_coords[:, 0] >= 0) & (xy_coords[:, 0] < W) & (xy_coords[:, 1] >= 0) & (
+    #                 xy_coords[:, 1] < H)
+    #     valid_coords = xy_coords[valid_mask].long()
+    #
+    #     # Create the full-resolution mask by "splatting" points
+    #     full_res_mask = torch.zeros((int(H), int(W)), device=device, dtype=torch.float32)
+    #     if valid_coords.shape[0] > 0:
+    #         full_res_mask[valid_coords[:, 1], valid_coords[:, 0]] = 1.0
+    #
+    #     # Prepare for downsampling
+    #     finished_mask_bchw = full_res_mask.unsqueeze(0).unsqueeze(0)
+    #
+    #     # Downsample using 'area' interpolation
+    #     mask_latent = F.interpolate(
+    #         finished_mask_bchw,
+    #         size=(h, w),
+    #         mode='area'
+    #     )
+    #
+    #     mask_latent = (mask_latent > 0.0).float()
+    #     mask_latent = 1 - mask_latent
+    #     new_masks.append(mask_latent.cpu())
+    #
+    #     vis_path_reproj = os.path.join(output_dir, f"03_reprojected_mask_cam_{i:02d}.png")
+    #     visualize_reprojection(full_res_mask, mask_latent, vis_path_reproj)
+    #     print(f"  Camera {i}: Re-projected {valid_coords.shape[0]} points. Visualization saved to {vis_path_reproj}")
 
 # https://learnopencv.com/simple-background-estimation-in-videos-using-opencv-c-python/
 def estimate_background(video):

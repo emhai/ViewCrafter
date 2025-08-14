@@ -58,7 +58,7 @@ def get_parser():
     parser.add_argument('--min_conf_thr', default=3.0) # minimum=1.0, maximum=20
 
     ## v2v
-    parser.add_argument("--use_mast3r", default=False, help="set to true if you want to use the mast3r framework for point cloud creation instead of dust3r")
+    parser.add_argument("--use_mast3r", action='store_true', default=False, help="use the mast3r framework for point cloud creation instead of dust3r")
     parser.add_argument("--pickle_path",  type=str,  default='/home/emmahaidacher/Masterthesis/MasterThesis/pickle.pkl', help="Path to dynamic point cloud created from pickle") # todo default
     parser.add_argument("--n_frames", type=int, default=16, help="num of frames for newly generated videos")
 

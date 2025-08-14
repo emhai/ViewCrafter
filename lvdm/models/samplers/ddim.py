@@ -170,6 +170,7 @@ class DDIMSampler(object):
         # cond_copy, unconditional_conditioning_copy = copy.deepcopy(cond), copy.deepcopy(unconditional_conditioning)
         for i, step in enumerate(iterator):
             index = total_steps - i - 1
+
             ts = torch.full((b,), step, device=device, dtype=torch.long)
 
             ## use mask to blend noised original latent (img_orig) & new sampled latent (img)
