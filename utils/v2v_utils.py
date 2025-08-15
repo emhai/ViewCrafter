@@ -173,7 +173,7 @@ def separate_cameras(results_folder, cameras_folder):
             create_video(os.path.join(cameras_folder, frame_type, file))
 
 
-def visualize_reprojection(full_res_mask, image, path):
+def visualize_pixel_masks(full_res_mask, image, path, title):
     fig, axs = plt.subplots(1, 3, figsize=(15, 5))
 
     axs[0].imshow(image.numpy())
@@ -181,7 +181,7 @@ def visualize_reprojection(full_res_mask, image, path):
     axs[0].axis("off")
 
     axs[1].imshow(full_res_mask.squeeze().numpy(), cmap='gray')
-    axs[1].set_title(f"Diff Mask")
+    axs[1].set_title(title)
     axs[1].axis("off")
 
     mask_resized = F.interpolate(full_res_mask, size=(image.shape[0], image.shape[1]), mode='nearest')  # shape: (1,1,768,1024)
@@ -221,7 +221,7 @@ def load_easi3r_masks(input_paths, current_imgs, output_dir=None):
             os.makedirs(output_dir)
 
         for i in range(len(all_masks)):
-            visualize_reprojection(all_masks[i], current_imgs[i], os.path.join(output_dir, f"easi3r_mask_{i}.png"))
+            visualize_pixel_masks(all_masks[i], current_imgs[i], os.path.join(output_dir, f"easi3r_mask_{i}.png"), "easi3r mask for this frame")
 
     return all_masks
 
@@ -263,38 +263,56 @@ def create_frame_diff_masks(current_imgs, prev_imgs, threshold=0.1, output_dir=N
             os.makedirs(output_dir)
 
         for i in range(len(all_masks)):
-            visualize_reprojection(all_masks[i], current_imgs[i], os.path.join(output_dir, f"pixel_diffs_{i}.png"))
+            visualize_pixel_masks(all_masks[i], current_imgs[i], os.path.join(output_dir, f"pixel_diffs_{i}.png"), "difference between first frame and current")
 
     return all_masks
 
-def draw_mask(image, mask_generated, save_path=None) :
-    masked_image = image.copy()
+def visualize_pointcloud(full_pc, masked_pc, path):
 
-    masked_image = np.where(mask_generated.astype(int),
-                          np.array([0,255,0], dtype='uint8'),
-                          masked_image)
+    full_pc = full_pc.reshape(-1, 3)
+    full_pc = full_pc.detach().cpu().numpy()
+    masked_pc = masked_pc.detach().cpu().numpy()
 
-    masked_image = masked_image.astype(np.uint8)
+    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
 
-    opaque_masked_image = cv2.addWeighted(image, 0.3, masked_image, 0.7, 0)
+    axs[0].scatter(full_pc[:, 0], full_pc[:, 1], c=full_pc[:, 0], s=1)
+    axs[0].set_title("Full point cloud")
+    axs[0].axis("off")
 
-    if save_path is not None:
-        cv2.imwrite(os.path.join(save_path, "opaque_mask.jpg"), opaque_masked_image)
+    axs[1].scatter(masked_pc[:, 0], masked_pc[:, 1], c=masked_pc[:, 0], s=1)
+    axs[1].set_title("Masked point cloud")
+    axs[1].axis("off")
 
-    return opaque_masked_image
+    plt.tight_layout()
+    plt.savefig(path)
+    plt.close(fig)
 
-
-
-def get_masked_pointcloud(imgs, masks, pcd, output_dir=None):
+def get_masked_pointcloud(masks, pcd, output_dir=None):
 
     if output_dir is not None:
         if not os.path.isdir(output_dir):
             os.makedirs(output_dir)
         # visualize_masks(all_masks, os.path.join(output_dir, "pixel_diffs.png"))
 
-    get_pc(imgs, pcd, masks, mask_pc=True)
+    assert len(pcd) == len(masks)
 
-    return pts
+    masked_point_cloud = []
+    full_point_cloud = []
+    for i, mask in enumerate(masks):
+        mask_2d_half = mask.squeeze(0).squeeze(0).bool()
+        mask_2d_half = ~mask_2d_half
+        points = pcd[i].cpu()
+        masked_points = points[mask_2d_half]
+        masked_point_cloud.append(masked_points)
+        full_point_cloud.append(points)
+
+    masked_point_cloud = torch.cat(masked_point_cloud, dim=0)
+    full_point_cloud = torch.cat(full_point_cloud, dim=0)
+    print(f"size of masked_pc: {len(masked_point_cloud)}")
+
+    visualize_pointcloud(full_point_cloud, masked_point_cloud, os.path.join(output_dir, "masked_pc.png"))
+
+    return masked_point_cloud
 
 def interpolate_masks(masks, pcd, traj, output_dir=None):
 
@@ -305,9 +323,6 @@ def interpolate_masks(masks, pcd, traj, output_dir=None):
 
     assert len(masks) == len(pcd)
 
-    # h2, w2 = mask_pixel_space.shape[2], mask_pixel_space.shape[3]
-    # mask_2d_half = F.interpolate(mask_pixel_space.float(), size=(h2 // 2, w2 // 2),
-    #                              mode='nearest')  # get to same dim as pc
     # mask_2d_half = mask_2d_half.squeeze(0).squeeze(0).bool()
     # mask_2d_half = ~mask_2d_half
     # points = pcd[i].cpu()
@@ -378,7 +393,7 @@ def estimate_background(video):
 
     background = np.median(frames, axis=0).astype(np.uint8)
 
-    cv2.imwrite('/media/emmahaidacher/Volume/TESTS/bg.jpg', background)
+    cv2.imwrite('/media/emmahaidacher/Volume/TESTS/bg.png', background)
 
 
 def main():

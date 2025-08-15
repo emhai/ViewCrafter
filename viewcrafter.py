@@ -165,8 +165,10 @@ class ViewCrafter:
             easier_mask_path = f"/media/emmahaidacher/Volume/GOOD_RESULTS/easi3r/test_espresso_short16f/dynamic_mask_{self.run_number}.png"  # todo
             diff_masks = create_frame_diff_masks(self.first_image, current_image, output_dir=mask_save_path) # or with self.prev_image
             eas_masks = load_easi3r_masks(easier_mask_path, current_image, mask_save_path)
-            print("done")
-            complete_mask = diff_masks + eas_masks
+
+            pc = get_masked_pointcloud(diff_masks, pcd, mask_save_path)
+
+            complete_mask = None
 
         with torch.no_grad(), torch.cuda.amp.autocast():
             # [1,1,c,t,h,w]
