@@ -271,43 +271,6 @@ def create_frame_diff_masks(current_imgs, prev_imgs, threshold=0.1, output_dir=N
 
     return all_masks
 
-
-def save_pc_ply(point_cloud, path):
-    if point_cloud.ndim == 3:
-        point_cloud = point_cloud.reshape(-1, 3)
-
-
-def visualize_pointcloud(full_pc, masked_pc, path):
-
-    full_pc = full_pc.reshape(-1, 3)
-    full_pc = full_pc.detach().cpu().numpy()
-    masked_pc = masked_pc.detach().cpu().numpy()
-    fig = plt.figure(figsize=(10, 5))
-
-    # Left: full point cloud
-    ax1 = fig.add_subplot(121, projection='3d')
-    ax1.scatter(full_pc[:, 0], full_pc[:, 1], full_pc[:, 2], s=1, c=full_pc[:, 0])
-    ax1.set_title("Full point cloud")
-
-    # Right: masked point cloud
-    ax2 = fig.add_subplot(122, projection='3d')
-    ax2.scatter(masked_pc[:, 0], masked_pc[:, 1], masked_pc[:, 2], s=1, c=masked_pc[:, 0])
-    ax2.set_title("Masked point cloud")
-
-    # Optional: make both subplots use the same scale so distances match visually
-    all_points = np.vstack([full_pc, masked_pc])
-    for ax in (ax1, ax2):
-        ax.set_xlim(all_points[:, 0].min(), all_points[:, 0].max())
-        ax.set_ylim(all_points[:, 1].min(), all_points[:, 1].max())
-        ax.set_zlim(all_points[:, 2].min(), all_points[:, 2].max())
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-
-    plt.tight_layout()
-    plt.savefig(path)
-    plt.close(fig)
-
 def get_masked_pointcloud(masks, pcd, output_dir=None):
 
     if output_dir is not None:
@@ -330,8 +293,6 @@ def get_masked_pointcloud(masks, pcd, output_dir=None):
     masked_point_cloud = torch.cat(masked_point_cloud, dim=0)
     full_point_cloud = torch.cat(full_point_cloud, dim=0)
     print(f"size of masked_pc: {len(masked_point_cloud)}")
-
-    visualize_pointcloud(full_point_cloud, masked_point_cloud, os.path.join(output_dir, "masked_pc.png"))
 
     return masked_point_cloud
 

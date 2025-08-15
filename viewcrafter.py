@@ -115,7 +115,7 @@ class ViewCrafter:
         else:
             self.scene = scene
 
-    def render_pcd(self,pts3d,imgs,masks,views,renderer,device,nbv=False):
+    def render_pcd(self, pts3d ,imgs, masks, views, renderer, device,nbv=False):
         
         imgs = to_numpy(imgs)
         pts3d = to_numpy(pts3d)
@@ -140,7 +140,7 @@ class ViewCrafter:
 
         return images, view_masks
     
-    def run_render(self, pcd, imgs,masks, H, W, camera_traj,num_views,nbv=False):
+    def run_render(self, pcd, imgs, masks, H, W, camera_traj,num_views,nbv=False):
         render_setup = setup_renderer(camera_traj, image_size=(H,W))
         renderer = render_setup['renderer']
         render_results, viewmask = self.render_pcd(pcd, imgs, masks, num_views,renderer,self.device,nbv=False)
@@ -154,7 +154,11 @@ class ViewCrafter:
         condition_index = [0]
 
         if self.run_number == 0: # first run
-            self.guidance_image = self.guidance_image = videos[:, :, condition_index[0]]  # bchw - anchor image/s
+            if isinstance(self.img_ori, list):
+                guidance_image = self.img_ori[0]
+            else:
+                guidance_image = self.img_ori
+            self.guidance_image = (guidance_image * 2. -1.).permute(2, 0, 1).unsqueeze(0).to(self.device)
             self.first_image = self.img_ori
             complete_mask = None
         else:
@@ -165,14 +169,8 @@ class ViewCrafter:
             easier_mask_path = f"/media/emmahaidacher/Volume/GOOD_RESULTS/easi3r/test_espresso_short16f/dynamic_mask_{self.run_number}.png"  # todo
             diff_masks = create_frame_diff_masks(self.first_image, current_image, output_dir=mask_save_path) # or with self.prev_image
             eas_masks = load_easi3r_masks(easier_mask_path, current_image, mask_save_path)
-            save_pointcloud_with_normals(imgs, pcd, diff_masks, os.path.join(mask_save_path, "diff_mask.ply"), mask_pc=True, reduce_pc=False)
-            save_pointcloud_with_normals(imgs, pcd, eas_masks, os.path.join(mask_save_path, "eas_mask.ply"), mask_pc=True, reduce_pc=False)
-
-            pc = get_masked_pointcloud(diff_masks, pcd, mask_save_path)
-
-            save_pointcloud_with_normals([imgs[-1]], [pcd[-1]], msk=None,
-                                         save_path=os.path.join(self.opts.save_dir, 'pcd0.ply'), mask_pc=False,
-                                         reduce_pc=False)
+            diff_pc = save_pointcloud_with_normals(imgs, pcd, diff_masks, os.path.join(mask_save_path, "diff_mask.ply"), mask_pc=True, reduce_pc=False)
+            easier_pc = save_pointcloud_with_normals(imgs, pcd, eas_masks, os.path.join(mask_save_path, "easi_mask.ply"), mask_pc=True, reduce_pc=False)
 
             complete_mask = None
 
@@ -200,7 +198,7 @@ class ViewCrafter:
             batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
                                                    self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
                                                    self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-                                                   condition_index, guidance_image=self.guidance_image, prev_latent=None, first_latent=self.first_latent, mask=complete_mask)
+                                                   None, guidance_image=self.guidance_image, prev_latent=None, first_latent=self.first_latent, mask=complete_mask)
 
             if self.run_number == 0:
                 self.first_latent = current_x0
@@ -343,6 +341,8 @@ class ViewCrafter:
         render_results, viewmask = self.run_render([pcd[-1]], [imgs[-1]], masks, H, W, camera_traj, num_views)
         render_results = F.interpolate(render_results.permute(0, 3, 1, 2), size=(self.opts.height, self.opts.width), mode='bilinear',
                                        align_corners=False).permute(0, 2, 3, 1)
+
+
         render_results[0] = self.img_ori
         if self.opts.mode == 'single_view_txt':
             if phi[-1] == 0. and theta[-1] == 0. and r[-1] == 0.:

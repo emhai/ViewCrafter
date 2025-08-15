@@ -481,6 +481,8 @@ end_header
                 normal[0], normal[1], normal[2]
             ))
 
+    return pc
+
 
 def get_pc(imgs, pts3d, mask, mask_pc=False, reduce_pc=False):
     imgs = to_numpy(imgs)
