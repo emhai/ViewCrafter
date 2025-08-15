@@ -147,7 +147,7 @@ class ViewCrafter:
         return render_results, viewmask
 
     
-    def run_diffusion(self, renderings, pcd=None, traj=None):
+    def run_diffusion(self, renderings, imgs=None, pcd=None, traj=None):
 
         prompts = [self.opts.prompt]
         videos = (renderings * 2. - 1.).permute(3,0,1,2).unsqueeze(0).to(self.device)
@@ -165,8 +165,14 @@ class ViewCrafter:
             easier_mask_path = f"/media/emmahaidacher/Volume/GOOD_RESULTS/easi3r/test_espresso_short16f/dynamic_mask_{self.run_number}.png"  # todo
             diff_masks = create_frame_diff_masks(self.first_image, current_image, output_dir=mask_save_path) # or with self.prev_image
             eas_masks = load_easi3r_masks(easier_mask_path, current_image, mask_save_path)
+            save_pointcloud_with_normals(imgs, pcd, diff_masks, os.path.join(mask_save_path, "diff_mask.ply"), mask_pc=True, reduce_pc=False)
+            save_pointcloud_with_normals(imgs, pcd, eas_masks, os.path.join(mask_save_path, "eas_mask.ply"), mask_pc=True, reduce_pc=False)
 
             pc = get_masked_pointcloud(diff_masks, pcd, mask_save_path)
+
+            save_pointcloud_with_normals([imgs[-1]], [pcd[-1]], msk=None,
+                                         save_path=os.path.join(self.opts.save_dir, 'pcd0.ply'), mask_pc=False,
+                                         reduce_pc=False)
 
             complete_mask = None
 
@@ -347,7 +353,7 @@ class ViewCrafter:
         save_pointcloud_with_normals([imgs[-1]], [pcd[-1]], msk=None,
                                      save_path=os.path.join(self.opts.save_dir, 'pcd.ply'), mask_pc=False,
                                      reduce_pc=False)
-        diffusion_results = self.run_diffusion(render_results, [pcd[-1]], camera_traj)
+        diffusion_results = self.run_diffusion(render_results, [imgs[-1]], [pcd[-1]], camera_traj)
         save_video((diffusion_results + 1.0) / 2.0, os.path.join(self.opts.save_dir, 'diffusion.mp4'),
                    os.path.join(self.opts.save_dir, DIFFUSION_FRAMES))
 
@@ -510,7 +516,7 @@ class ViewCrafter:
             print(f'Generating clip {i} ...\n')
             diffusion_results.append(self.run_diffusion(render_results[
                                                         i * (self.opts.video_length - 1):self.opts.video_length + i * (
-                                                                    self.opts.video_length - 1)], pcd, camera_traj))
+                                                                    self.opts.video_length - 1)], imgs, pcd, camera_traj))
         print(f'Finish!\n')
         diffusion_results = torch.cat(diffusion_results)
         save_video((diffusion_results + 1.0) / 2.0, os.path.join(self.opts.save_dir, f'diffusion.mp4'),

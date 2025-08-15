@@ -445,7 +445,7 @@ def inv(mat):
     raise ValueError(f'bad matrix type = {type(mat)}')
 
 def save_pointcloud_with_normals(imgs, pts3d, msk, save_path, mask_pc, reduce_pc):
-    pc = get_pc(imgs, pts3d, msk,mask_pc,reduce_pc)  # Assuming get_pc is defined elsewhere and returns a trimesh point cloud
+    pc = get_pc(imgs, pts3d, msk, mask_pc,reduce_pc)  # Assuming get_pc is defined elsewhere and returns a trimesh point cloud
 
     # Define a default normal, e.g., [0, 1, 0]
     default_normal = [0, 1, 0]

@@ -189,7 +189,7 @@ def visualize_pixel_masks(full_res_mask, image, path, title):
     # Step 2 — squeeze to H,W
     mask_2d = mask_resized.squeeze() # shape: (768,1024)
     axs[2].imshow(image.numpy())  # original image
-    axs[2].imshow(mask_2d, cmap='Reds_r', alpha=0.5)  # transparent red mask
+    axs[2].imshow(mask_2d, cmap='Reds', alpha=0.5)  # transparent red mask
     axs[2].axis('off')
 
     plt.tight_layout()
@@ -197,6 +197,10 @@ def visualize_pixel_masks(full_res_mask, image, path, title):
     plt.close(fig)
 
 def load_easi3r_masks(input_paths, current_imgs, output_dir=None):
+
+    if output_dir is not None:
+        if not os.path.isdir(output_dir):
+            os.makedirs(output_dir)
 
     # creates masks of shape (1, 1, H /2, W/2) # same dim as point cloud created by dust3r
     if not isinstance(input_paths, list):
@@ -211,17 +215,14 @@ def load_easi3r_masks(input_paths, current_imgs, output_dir=None):
         easier_mask = Image.open(input_paths[i]).convert("L")
         to_tensor = transforms.ToTensor()  # Converts to float tensor in range [0, 1]
         mask_tensor = to_tensor(easier_mask)
-        mask_tensor = 1.0 - mask_tensor # invert to fit with ddim sampling blending
+        # mask_tensor = 1.0 - mask_tensor # invert to fit with ddim sampling blending
         mask_tensor = mask_tensor.unsqueeze(0)
         print(mask_tensor.shape)
-        all_masks.append(mask_tensor)
 
-    if output_dir is not None:
-        if not os.path.isdir(output_dir):
-            os.makedirs(output_dir)
+        if output_dir is not None:
+            visualize_pixel_masks(mask_tensor, current_imgs[i], os.path.join(output_dir, f"easi3r_mask_{i}.png"), "easi3r mask for this frame")
 
-        for i in range(len(all_masks)):
-            visualize_pixel_masks(all_masks[i], current_imgs[i], os.path.join(output_dir, f"easi3r_mask_{i}.png"), "easi3r mask for this frame")
+        all_masks.append(mask_tensor.bool().squeeze())
 
     return all_masks
 
@@ -232,6 +233,10 @@ def create_frame_diff_masks(current_imgs, prev_imgs, threshold=0.1, output_dir=N
     if not isinstance(current_imgs, list):
         current_imgs = [current_imgs]
         prev_imgs = [prev_imgs]
+
+    if output_dir is not None:
+        if not os.path.isdir(output_dir):
+            os.makedirs(output_dir)
 
     assert len(current_imgs) == len(prev_imgs)
 
@@ -251,37 +256,53 @@ def create_frame_diff_masks(current_imgs, prev_imgs, threshold=0.1, output_dir=N
         diff_mask_pixel_space = torch.sum(abs_diff, dim=1, keepdim=True)  # Shape: [1, 1, H, W]
 
         # Mask is 1.0 where pixels are similar, 0.0 where they are different
-        mask_pixel_space = (diff_mask_pixel_space < threshold).float()
+        # mask_pixel_space = (diff_mask_pixel_space < threshold).float()
+
+        mask_pixel_space = (diff_mask_pixel_space > threshold).float()
         h2, w2 = mask_pixel_space.shape[2], mask_pixel_space.shape[3]
         mask_pixel_space_half = F.interpolate(mask_pixel_space.float(), size=(h2 // 2, w2 // 2),
-                                     mode='nearest')  # get to same dim as pc
+                                              mode='nearest')  # get to same dim as pc
         print(mask_pixel_space_half.shape)
-        all_masks.append(mask_pixel_space_half)
 
-    if output_dir is not None:
-        if not os.path.isdir(output_dir):
-            os.makedirs(output_dir)
+        if output_dir is not None:
+            visualize_pixel_masks(mask_pixel_space_half, current_imgs[i], os.path.join(output_dir, f"pixel_diffs_{i}.png"), "difference between first frame and current")
 
-        for i in range(len(all_masks)):
-            visualize_pixel_masks(all_masks[i], current_imgs[i], os.path.join(output_dir, f"pixel_diffs_{i}.png"), "difference between first frame and current")
+        all_masks.append(mask_pixel_space_half.bool().squeeze())
 
     return all_masks
+
+
+def save_pc_ply(point_cloud, path):
+    if point_cloud.ndim == 3:
+        point_cloud = point_cloud.reshape(-1, 3)
+
 
 def visualize_pointcloud(full_pc, masked_pc, path):
 
     full_pc = full_pc.reshape(-1, 3)
     full_pc = full_pc.detach().cpu().numpy()
     masked_pc = masked_pc.detach().cpu().numpy()
+    fig = plt.figure(figsize=(10, 5))
 
-    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+    # Left: full point cloud
+    ax1 = fig.add_subplot(121, projection='3d')
+    ax1.scatter(full_pc[:, 0], full_pc[:, 1], full_pc[:, 2], s=1, c=full_pc[:, 0])
+    ax1.set_title("Full point cloud")
 
-    axs[0].scatter(full_pc[:, 0], full_pc[:, 1], c=full_pc[:, 0], s=1)
-    axs[0].set_title("Full point cloud")
-    axs[0].axis("off")
+    # Right: masked point cloud
+    ax2 = fig.add_subplot(122, projection='3d')
+    ax2.scatter(masked_pc[:, 0], masked_pc[:, 1], masked_pc[:, 2], s=1, c=masked_pc[:, 0])
+    ax2.set_title("Masked point cloud")
 
-    axs[1].scatter(masked_pc[:, 0], masked_pc[:, 1], c=masked_pc[:, 0], s=1)
-    axs[1].set_title("Masked point cloud")
-    axs[1].axis("off")
+    # Optional: make both subplots use the same scale so distances match visually
+    all_points = np.vstack([full_pc, masked_pc])
+    for ax in (ax1, ax2):
+        ax.set_xlim(all_points[:, 0].min(), all_points[:, 0].max())
+        ax.set_ylim(all_points[:, 1].min(), all_points[:, 1].max())
+        ax.set_zlim(all_points[:, 2].min(), all_points[:, 2].max())
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
 
     plt.tight_layout()
     plt.savefig(path)
