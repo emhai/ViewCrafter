@@ -174,6 +174,10 @@ def separate_cameras(results_folder, cameras_folder):
 
 
 def visualize_pixel_masks(full_res_mask, image, path, title):
+
+    if not os.path.isdir(os.path.dirname(path)):
+        os.makedirs(os.path.dirname(path))
+
     fig, axs = plt.subplots(1, 3, figsize=(15, 5))
 
     axs[0].imshow(image.numpy())
@@ -196,11 +200,27 @@ def visualize_pixel_masks(full_res_mask, image, path, title):
     plt.savefig(path)
     plt.close(fig)
 
-def load_easi3r_masks(input_paths, current_imgs, output_dir=None):
+def visualize_masks_horizontal(masks, path, cmap=None):
 
-    if output_dir is not None:
-        if not os.path.isdir(output_dir):
-            os.makedirs(output_dir)
+    if not os.path.isdir(os.path.dirname(path)):
+        os.makedirs(os.path.dirname(path))
+
+    if isinstance(masks, torch.Tensor):
+        masks = masks.detach().cpu().numpy()
+
+    n = masks.shape[0]
+    fig, axes = plt.subplots(1, n, figsize=(n * 5, 5))
+
+    for i in range(n):
+        axes[i].imshow(masks[i], cmap=cmap)
+        axes[i].axis("off")
+        axes[i].set_title(f"Mask {i}")
+
+    plt.tight_layout()
+    plt.savefig(path)
+    plt.close(fig)
+
+def load_easi3r_masks(input_paths, current_imgs, output_dir=None):
 
     # creates masks of shape (1, 1, H /2, W/2) # same dim as point cloud created by dust3r
     if not isinstance(input_paths, list):
@@ -233,10 +253,6 @@ def create_frame_diff_masks(current_imgs, prev_imgs, threshold=0.1, output_dir=N
     if not isinstance(current_imgs, list):
         current_imgs = [current_imgs]
         prev_imgs = [prev_imgs]
-
-    if output_dir is not None:
-        if not os.path.isdir(output_dir):
-            os.makedirs(output_dir)
 
     assert len(current_imgs) == len(prev_imgs)
 

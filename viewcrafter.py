@@ -56,8 +56,8 @@ class ViewCrafter:
             self.predicted_poses = None
             self.predicted_focals = None
             self.guidance_image = None
-            self.prev_latent = None
             self.prev_image = None
+            self.prev_latent = None
             self.first_image = None
             self.first_latent = None
             self.run_number = 0
@@ -147,32 +147,11 @@ class ViewCrafter:
         return render_results, viewmask
 
     
-    def run_diffusion(self, renderings, imgs=None, pcd=None, traj=None):
+    def run_diffusion(self, renderings, masks=None):
 
         prompts = [self.opts.prompt]
         videos = (renderings * 2. - 1.).permute(3,0,1,2).unsqueeze(0).to(self.device)
         condition_index = [0]
-
-        if self.run_number == 0: # first run
-            if isinstance(self.img_ori, list):
-                guidance_image = self.img_ori[0]
-            else:
-                guidance_image = self.img_ori
-            self.guidance_image = (guidance_image * 2. -1.).permute(2, 0, 1).unsqueeze(0).to(self.device)
-            self.first_image = self.img_ori
-            complete_mask = None
-        else:
-            current_image = self.img_ori
-            latent_height, latent_width = self.prev_latent.shape[-2:] # TODO make nicer
-            mask_save_path = os.path.join(self.opts.save_dir, MASKS_DIR)
-
-            easier_mask_path = f"/media/emmahaidacher/Volume/GOOD_RESULTS/easi3r/test_espresso_short16f/dynamic_mask_{self.run_number}.png"  # todo
-            diff_masks = create_frame_diff_masks(self.first_image, current_image, output_dir=mask_save_path) # or with self.prev_image
-            eas_masks = load_easi3r_masks(easier_mask_path, current_image, mask_save_path)
-            diff_pc = save_pointcloud_with_normals(imgs, pcd, diff_masks, os.path.join(mask_save_path, "diff_mask.ply"), mask_pc=True, reduce_pc=False)
-            easier_pc = save_pointcloud_with_normals(imgs, pcd, eas_masks, os.path.join(mask_save_path, "easi_mask.ply"), mask_pc=True, reduce_pc=False)
-
-            complete_mask = None
 
         with torch.no_grad(), torch.cuda.amp.autocast():
             # [1,1,c,t,h,w]
@@ -180,25 +159,25 @@ class ViewCrafter:
             # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
             #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
             #                                        self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-            #                                        condition_index, guidance_image=None, prev_latent=None, first_latent=None, mask=None)
+            #                                        condition_index, guidance_image=None, latent=None, mask=None)
             #
             # Use same reference picture for all
             # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
             #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
             #                                        self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-            #                                        condition_index, guidance_image=self.guidance_image, prev_latent=None, first_latent=None, mask=None)
+            #                                        condition_index, guidance_image=self.guidance_image, latent=None, mask=None)
             #
             # Use same reference picture for all and previous_latent blending
             # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
             #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
             #                                        self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-            #                                        condition_index, guidance_image=self.guidance_image, prev_latent=self.prev_latent, first_latent=None, mask=complete_mask)
+            #                                        condition_index, guidance_image=self.guidance_image, latent=self.prev_latent, mask=complete_mask)
             #
             # Use same reference picture for all and first_latent blending
             batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
                                                    self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
                                                    self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-                                                   None, guidance_image=self.guidance_image, prev_latent=None, first_latent=self.first_latent, mask=complete_mask)
+                                                   None, guidance_image=self.guidance_image, latent=self.first_latent, mask=masks)
 
             if self.run_number == 0:
                 self.first_latent = current_x0
@@ -209,6 +188,49 @@ class ViewCrafter:
             # torch.Size([1, 3, 25, 576, 1024]) [-1,1]
 
         return torch.clamp(batch_samples[0][0].permute(1,2,3,0), -1., 1.) 
+
+    def create_binary_masks(self, easi3r=False, easi3r_path=None, comp_with_previous=False, comp_with_first=False):
+
+        current_image = self.img_ori
+        mask_save_path = os.path.join(self.opts.save_dir, MASKS_DIR)
+
+        if easi3r:
+            easi3r_mask_path = f"/media/emmahaidacher/Volume/GOOD_RESULTS/easi3r/test_espresso_short16f/dynamic_mask_{self.run_number}.png"  # todo
+            return load_easi3r_masks(easi3r_mask_path, current_image, mask_save_path)
+
+        if comp_with_first:
+            return create_frame_diff_masks(self.first_image, current_image, output_dir=mask_save_path)
+
+        if comp_with_previous:
+            return create_frame_diff_masks(self.prev_image, current_image, output_dir=mask_save_path)
+
+        return None
+
+    def rendered_mask_to_binary(self, rendered_mask):
+
+        threshold = 1e-6
+        return (rendered_mask.abs() > threshold).any(dim=-1)
+
+    def binary_mask_to_latent(self, binary_mask):
+
+        _, _, n, h, w = self.noise_shape
+        binary_mask = binary_mask.float()
+        binary_mask = binary_mask.unsqueeze(0).unsqueeze(0)
+
+        mask_latent = F.interpolate(
+            binary_mask,
+            size=(n, h, w),
+            mode='area'  # 'area' interpolation is robust for downsampling
+        )
+
+        return mask_latent
+
+    def set_guidance(self):
+        if isinstance(self.img_ori, list):
+            guidance_image = self.img_ori[0]
+        else:
+            guidance_image = self.img_ori
+        self.guidance_image = (guidance_image * 2. -1.).permute(2, 0, 1).unsqueeze(0).to(self.device)
 
     def nvs_single_view(self, gradio=False):
         # 最后一个view为 0 pose
@@ -353,7 +375,23 @@ class ViewCrafter:
         save_pointcloud_with_normals([imgs[-1]], [pcd[-1]], msk=None,
                                      save_path=os.path.join(self.opts.save_dir, 'pcd.ply'), mask_pc=False,
                                      reduce_pc=False)
-        diffusion_results = self.run_diffusion(render_results, [imgs[-1]], [pcd[-1]], camera_traj)
+
+        latent_masks = None
+        if self.run_number > 0:
+            binary_masks = self.create_binary_masks(comp_with_first=True)
+            masked_render_results, viewmask = self.run_render([pcd[-1]], [imgs[-1]], binary_masks, H, W, camera_traj, num_views)
+            render_results = F.interpolate(masked_render_results.permute(0, 3, 1, 2), size=(self.opts.height, self.opts.width),
+                                           mode='bilinear',
+                                           align_corners=False).permute(0, 2, 3, 1)
+            save_video(masked_render_results, os.path.join(self.opts.save_dir, 'masked_render.mp4'),
+                       os.path.join(self.opts.save_dir, MASKED_RENDER_FRAMES))
+            boolean_masks = self.rendered_mask_to_binary(masked_render_results)
+            latent_masks = self.binary_mask_to_latent(boolean_masks)
+            visualize_masks_horizontal(boolean_masks, os.path.join(self.opts.save_dir, MASKS_DIR, "bool_masks_all.png"), cmap='grey')
+            visualize_masks_horizontal(masked_render_results, os.path.join(self.opts.save_dir, MASKS_DIR, "diff_masks_all.png"))
+            visualize_masks_horizontal(latent_masks, os.path.join(self.opts.save_dir, MASKS_DIR, "latent_masks_all.png"))
+
+        diffusion_results = self.run_diffusion(render_results, latent_masks)
         save_video((diffusion_results + 1.0) / 2.0, os.path.join(self.opts.save_dir, 'diffusion.mp4'),
                    os.path.join(self.opts.save_dir, DIFFUSION_FRAMES))
 
@@ -510,6 +548,8 @@ class ViewCrafter:
         save_pointcloud_with_normals(imgs, pcd, msk=masks, save_path=os.path.join(self.opts.save_dir, f'pcd.ply'),
                                      mask_pc=mask_pc, reduce_pc=False)
 
+        binary_masks = self.create_binary_masks()
+
         diffusion_results = []
         print(f'Generating {len(self.img_ori) - 1} clips\n')
         for i in range(len(self.img_ori) - 1):
@@ -652,6 +692,10 @@ class ViewCrafter:
             os.mkdir(self.opts.save_dir)
             self.images, self.img_ori = self.load_initial_images(image_dir=self.opts.image_dir)
 
+            if self.run_number == 0:
+                self.first_image = self.img_ori
+                self.set_guidance()
+
             self.nvs_single_view_v2v()
 
             end = time.time()
@@ -685,6 +729,14 @@ class ViewCrafter:
             os.mkdir(self.opts.save_dir)
             self.images, self.img_ori = self.load_initial_dir(image_dir=self.opts.image_dir)
             self.run_dust3r(input_images=self.images, clean_pc=True)
+
+            if self.run_number == 0:  # first run
+                if isinstance(self.img_ori, list):
+                    guidance_image = self.img_ori[0]
+                else:
+                    guidance_image = self.img_ori
+                self.guidance_image = (guidance_image * 2. - 1.).permute(2, 0, 1).unsqueeze(0).to(self.device)
+                self.first_image = self.img_ori
 
             self.nvs_sparse_view_interp_v2v()
 

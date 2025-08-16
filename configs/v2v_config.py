@@ -8,6 +8,7 @@ ORIGINAL_VIDEOS_DIR = "original_videos" # copy of original videos
 SEPERATED_CAMERAS_DIR = "cameras"       # newly generated videos of all positions interpolated between original video
 DIFFUSION_FRAMES = "diffusion_frames"   # in cameras, stitched together diffusion frames
 RENDER_FRAMES = "render_frames"         # in cameras, stitched together render frames
+MASKED_RENDER_FRAMES = "masked_render_frames"         # in cameras, stitched together render frames
 
 DEPTHS_DIR = "depths"                   # for depth images as estimated per dust3r
 MASKS_DIR = "masks"                     # masks folder

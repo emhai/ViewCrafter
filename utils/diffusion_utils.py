@@ -117,7 +117,7 @@ def get_latent_z(model, videos):
 def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddim_steps=50, ddim_eta=1., \
                         unconditional_guidance_scale=1.0, cfg_img=None, fs=None, text_input=False, multiple_cond_cfg=False,
                            timestep_spacing='uniform', guidance_rescale=0.0, condition_index=None, guidance_image=None,
-                           prev_latent=None, first_latent=None, mask=None, **kwargs):
+                           latent=None, mask=None, **kwargs):
 
     ddim_sampler = DDIMSampler(model) if not multiple_cond_cfg else DDIMSampler_multicond(model)
     batch_size = noise_shape[0]
@@ -174,15 +174,9 @@ def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddi
     batch_variants = []
     for _ in range(n_samples):
 
-        if mask is not None:
+        if mask is not None and latent is not None:
             cond_mask = mask
-            if prev_latent is not None:
-                cond_z0 = prev_latent
-            elif first_latent is not None:
-                cond_z0 = first_latent
-            else:
-                cond_z0 = None
-                mask = None # if no latents given, default to no mask
+            cond_z0 = latent
         else:
             cond_z0 = None
             cond_mask = None
