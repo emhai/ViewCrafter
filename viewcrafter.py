@@ -65,7 +65,7 @@ class ViewCrafter:
             assert os.path.isdir(self.opts.image_dir)
             self.outer_folder = setup_structure(self.opts.save_dir, self.opts.image_dir)
 
-            if self.opts.mode == 'single_video_interp': # todo for multi / in viewcrafter ausführen
+            if self.opts.mode == 'single_video_interp': # todo for multi / easi3r in viewcrafter ausführen
                 # load pickle
                 with open(self.opts.pickle_path, 'rb') as f:
                     self.pickle_im_poses = pickle.load(f)
@@ -149,6 +149,7 @@ class ViewCrafter:
     
     def run_diffusion(self, renderings, masks=None):
 
+
         prompts = [self.opts.prompt]
         videos = (renderings * 2. - 1.).permute(3,0,1,2).unsqueeze(0).to(self.device)
         condition_index = [0]
@@ -220,7 +221,7 @@ class ViewCrafter:
         mask_latent = F.interpolate(
             binary_mask,
             size=(n, h, w),
-            mode='area'  # 'area' interpolation is robust for downsampling
+            mode='nearest'  # 'area' interpolation is robust for downsampling
         )
 
         return mask_latent
@@ -380,7 +381,7 @@ class ViewCrafter:
         if self.run_number > 0:
             binary_masks = self.create_binary_masks(comp_with_first=True)
             masked_render_results, viewmask = self.run_render([pcd[-1]], [imgs[-1]], binary_masks, H, W, camera_traj, num_views)
-            render_results = F.interpolate(masked_render_results.permute(0, 3, 1, 2), size=(self.opts.height, self.opts.width),
+            masked_render_results = F.interpolate(masked_render_results.permute(0, 3, 1, 2), size=(self.opts.height, self.opts.width),
                                            mode='bilinear',
                                            align_corners=False).permute(0, 2, 3, 1)
             save_video(masked_render_results, os.path.join(self.opts.save_dir, 'masked_render.mp4'),
@@ -389,7 +390,10 @@ class ViewCrafter:
             latent_masks = self.binary_mask_to_latent(boolean_masks)
             visualize_masks_horizontal(boolean_masks, os.path.join(self.opts.save_dir, MASKS_DIR, "bool_masks_all.png"), cmap='grey')
             visualize_masks_horizontal(masked_render_results, os.path.join(self.opts.save_dir, MASKS_DIR, "diff_masks_all.png"))
-            visualize_masks_horizontal(latent_masks, os.path.join(self.opts.save_dir, MASKS_DIR, "latent_masks_all.png"))
+            vis_latent_masks = latent_masks.squeeze()
+
+            visualize_masks_horizontal(vis_latent_masks, os.path.join(self.opts.save_dir, MASKS_DIR, "latent_masks_all.png"), cmap='grey')
+
 
         diffusion_results = self.run_diffusion(render_results, latent_masks)
         save_video((diffusion_results + 1.0) / 2.0, os.path.join(self.opts.save_dir, 'diffusion.mp4'),
@@ -731,12 +735,8 @@ class ViewCrafter:
             self.run_dust3r(input_images=self.images, clean_pc=True)
 
             if self.run_number == 0:  # first run
-                if isinstance(self.img_ori, list):
-                    guidance_image = self.img_ori[0]
-                else:
-                    guidance_image = self.img_ori
-                self.guidance_image = (guidance_image * 2. - 1.).permute(2, 0, 1).unsqueeze(0).to(self.device)
                 self.first_image = self.img_ori
+                self.set_guidance()
 
             self.nvs_sparse_view_interp_v2v()
 

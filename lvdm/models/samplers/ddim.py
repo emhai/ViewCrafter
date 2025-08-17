@@ -180,7 +180,8 @@ class DDIMSampler(object):
                     img_orig = x0
                 else:
                     img_orig = self.model.q_sample(x0, ts)  # TODO: deterministic forward pass? <ddim inversion>
-                img = img_orig * mask + (1. - mask) * img # keep original & modify use img
+                # img = img_orig * mask + (1. - mask) * img # keep original & modify use img
+                img = img_orig * (1. - mask) + mask * img # keep original & modify use img swapped
 
 
 

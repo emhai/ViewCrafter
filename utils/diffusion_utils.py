@@ -175,8 +175,8 @@ def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddi
     for _ in range(n_samples):
 
         if mask is not None and latent is not None:
-            cond_mask = mask
-            cond_z0 = latent
+            cond_mask = mask.clone()
+            cond_z0 = latent.clone()
         else:
             cond_z0 = None
             cond_mask = None
