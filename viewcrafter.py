@@ -178,7 +178,7 @@ class ViewCrafter:
             batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
                                                    self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
                                                    self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-                                                   None, guidance_image=self.guidance_image, latent=self.first_latent, mask=masks)
+                                                   None, guidance_image=self.guidance_image, latent=self.prev_latent, mask=masks)
 
             if self.run_number == 0:
                 self.first_latent = current_x0
@@ -221,7 +221,7 @@ class ViewCrafter:
         mask_latent = F.interpolate(
             binary_mask,
             size=(n, h, w),
-            mode='nearest'  # 'area' interpolation is robust for downsampling
+            mode='nearest'
         )
 
         return mask_latent
@@ -552,7 +552,27 @@ class ViewCrafter:
         save_pointcloud_with_normals(imgs, pcd, msk=masks, save_path=os.path.join(self.opts.save_dir, f'pcd.ply'),
                                      mask_pc=mask_pc, reduce_pc=False)
 
-        binary_masks = self.create_binary_masks()
+        latent_masks = None
+        if self.run_number > 0:
+            binary_masks = self.create_binary_masks(comp_with_previous=True)
+            masked_render_results, viewmask = self.run_render(pcd, imgs, binary_masks, H, W, camera_traj,
+                                                              num_views)
+            masked_render_results = F.interpolate(masked_render_results.permute(0, 3, 1, 2),
+                                                  size=(self.opts.height, self.opts.width),
+                                                  mode='bilinear',
+                                                  align_corners=False).permute(0, 2, 3, 1)
+            save_video(masked_render_results, os.path.join(self.opts.save_dir, 'masked_render.mp4'),
+                       os.path.join(self.opts.save_dir, MASKED_RENDER_FRAMES))
+            boolean_masks = self.rendered_mask_to_binary(masked_render_results)
+            latent_masks = self.binary_mask_to_latent(boolean_masks)
+            visualize_masks_horizontal(boolean_masks, os.path.join(self.opts.save_dir, MASKS_DIR, "bool_masks_all.png"),
+                                       cmap='grey')
+            visualize_masks_horizontal(masked_render_results,
+                                       os.path.join(self.opts.save_dir, MASKS_DIR, "diff_masks_all.png"))
+            vis_latent_masks = latent_masks.squeeze()
+
+            visualize_masks_horizontal(vis_latent_masks,
+                                       os.path.join(self.opts.save_dir, MASKS_DIR, "latent_masks_all.png"), cmap='grey')
 
         diffusion_results = []
         print(f'Generating {len(self.img_ori) - 1} clips\n')
@@ -560,7 +580,7 @@ class ViewCrafter:
             print(f'Generating clip {i} ...\n')
             diffusion_results.append(self.run_diffusion(render_results[
                                                         i * (self.opts.video_length - 1):self.opts.video_length + i * (
-                                                                    self.opts.video_length - 1)], imgs, pcd, camera_traj))
+                                                                    self.opts.video_length - 1)], latent_masks))
         print(f'Finish!\n')
         diffusion_results = torch.cat(diffusion_results)
         save_video((diffusion_results + 1.0) / 2.0, os.path.join(self.opts.save_dir, f'diffusion.mp4'),
@@ -671,54 +691,16 @@ class ViewCrafter:
                 all_results.append(diffusion_results_itr)
         return all_results
 
-    def run_single_video_interp(self):
-
+    def run_video_interp(self, mode):
         original_save_dir = self.opts.save_dir
-        input_dir = os.path.join(original_save_dir, INPUTS_DIR) # all inputs
-        results_dir = os.path.join(original_save_dir, RESULTS_DIR) # all results
-        all_frames = sorted(os.listdir(input_dir), key=lambda x: int(os.path.splitext(x)[0]))
-        all_frames = all_frames[:self.opts.n_frames]
-
-        self.opts.mode = 'single_view_txt' # necessary for inner functions - txt needs to be provided todo also different kinds possible
-
-        print(all_frames)
-        for frame in all_frames:
-            print("running frame", int(frame) + 1, "/", len(all_frames), "run_no: ", self.run_number)
-            start = time.time()
-
-            current_input_dir = os.path.join(input_dir, frame)
-            current_result_dir = os.path.join(results_dir, frame)
-            single_input_image = os.path.join(current_input_dir, os.listdir(current_input_dir)[0])
-
-            self.opts.image_dir = single_input_image
-            self.opts.save_dir = current_result_dir
-
-            os.mkdir(self.opts.save_dir)
-            self.images, self.img_ori = self.load_initial_images(image_dir=self.opts.image_dir)
-
-            if self.run_number == 0:
-                self.first_image = self.img_ori
-                self.set_guidance()
-
-            self.nvs_single_view_v2v()
-
-            end = time.time()
-            time_per_frame = (end - start) / 60
-            remaining_time = time_per_frame * (len(all_frames) - int(frame) -1)
-            print("elapsed time: {:.2f}min, est.remaining time: {:.2f}min, {:.2f}h\n".format(time_per_frame, remaining_time,
-                                                                          remaining_time / 60))
-            self.run_number = self.run_number + 1
-
-        separate_cameras(os.path.join(original_save_dir, RESULTS_DIR),
-                         os.path.join(original_save_dir, SEPERATED_CAMERAS_DIR))
-
-    def run_multi_video_interp(self):
-        original_save_dir = self.opts.save_dir
-        input_dir = os.path.join(original_save_dir, INPUTS_DIR)
-        results_dir = os.path.join(original_save_dir, RESULTS_DIR)
+        input_dir = os.path.join(original_save_dir, INPUTS_DIR)  # all inputs
+        results_dir = os.path.join(original_save_dir, RESULTS_DIR)  # all results
         all_frames = sorted(os.listdir(input_dir), key=lambda x: int(os.path.splitext(x)[0]))
         all_frames = all_frames[:self.opts.n_frames] # todo assert that n_frames < input_vid_frames
 
+        if mode == "single":
+            self.opts.mode = 'single_view_txt'  # necessary for inner functions - txt needs to be provided todo also different kinds possible
+
         print(all_frames)
         for frame in all_frames:
             print("running frame", int(frame) + 1, "/", len(all_frames), "run_no: ", self.run_number)
@@ -726,28 +708,42 @@ class ViewCrafter:
 
             current_input_dir = os.path.join(input_dir, frame)
             current_result_dir = os.path.join(results_dir, frame)
+
+            if mode == "single":
+                current_input_dir = os.path.join(current_input_dir, os.listdir(current_input_dir)[0])
 
             self.opts.image_dir = current_input_dir
             self.opts.save_dir = current_result_dir
 
             os.mkdir(self.opts.save_dir)
-            self.images, self.img_ori = self.load_initial_dir(image_dir=self.opts.image_dir)
-            self.run_dust3r(input_images=self.images, clean_pc=True)
 
-            if self.run_number == 0:  # first run
+            if mode == "single":
+                self.images, self.img_ori = self.load_initial_images(image_dir=self.opts.image_dir)
+            else: # mode == "multi"
+                self.images, self.img_ori = self.load_initial_dir(image_dir=self.opts.image_dir)
+                self.run_dust3r(input_images=self.images, clean_pc=True) # if single, pc is from easi3r
+
+            if self.run_number == 0:
                 self.first_image = self.img_ori
                 self.set_guidance()
 
-            self.nvs_sparse_view_interp_v2v()
+            if mode == "single":
+                self.nvs_single_view_v2v()
+            else: # mode == "multi"
+                self.nvs_sparse_view_interp_v2v()
+
+            self.prev_image = self.img_ori
 
             end = time.time()
             time_per_frame = (end - start) / 60
             remaining_time = time_per_frame * (len(all_frames) - int(frame) - 1)
-            print("elapsed time: {:.2f}min, est. remaining time: {:.2f}min, {:.2f}h\n".format(time_per_frame, remaining_time, remaining_time / 60))
-
-            self.run_number = self.run_number + 1
+            print("elapsed time: {:.2f}min, est.remaining time: {:.2f}min, {:.2f}h\n".format(time_per_frame,
+                                                                                             remaining_time,
+                                                                                             remaining_time / 60))
+            self.run_number += 1
 
         separate_cameras(results_dir, os.path.join(original_save_dir, SEPERATED_CAMERAS_DIR))
+
 
     def setup_diffusion(self):
         seed_everything(self.opts.seed)

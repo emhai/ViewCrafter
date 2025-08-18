@@ -41,10 +41,10 @@ if __name__=="__main__":
         pvd.nvs_sparse_view_interp()
 
     elif opts.mode == 'multi_video_interp':
-        pvd.run_multi_video_interp()
+        pvd.run_video_interp("multi")
 
     elif opts.mode == 'single_video_interp':
-        pvd.run_single_video_interp()
+        pvd.run_video_interp("single")
 
 
     else:
