@@ -380,6 +380,7 @@ class UNetModel(nn.Module):
             )
             nn.init.zeros_(self.fps_embedding[-1].weight)
             nn.init.zeros_(self.fps_embedding[-1].bias)
+
         ## Input Block
         self.input_blocks = nn.ModuleList(
             [

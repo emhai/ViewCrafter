@@ -42,7 +42,8 @@ class RelativePosition(nn.Module):
 class CrossAttention(nn.Module):
 
     def __init__(self, query_dim, context_dim=None, heads=8, dim_head=64, dropout=0., 
-                 relative_position=False, temporal_length=None, video_length=None, image_cross_attention=False, image_cross_attention_scale=1.0, image_cross_attention_scale_learnable=False, text_context_len=77):
+                 relative_position=False, temporal_length=None, video_length=None, image_cross_attention=False,
+                 image_cross_attention_scale=1.0, image_cross_attention_scale_learnable=False, text_context_len=77):
         super().__init__()
         inner_dim = dim_head * heads
         context_dim = default(context_dim, query_dim)

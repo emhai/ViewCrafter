@@ -29,7 +29,8 @@ import torchvision.transforms as transforms
 from PIL import Image
 from utils.pvd_utils import *
 from utils.v2v_utils import *
-
+from lvdm.models.samplers.ddim import DDIMSampler
+from lvdm.models.samplers.ddim_multiplecond import DDIMSampler as DDIMSampler_multicond
 from omegaconf import OmegaConf
 from pytorch_lightning import seed_everything
 from utils.diffusion_utils import instantiate_from_config,load_model_checkpoint,image_guided_synthesis
@@ -62,6 +63,7 @@ class ViewCrafter:
             self.first_latent = None
             self.run_number = 0
             self.mask_type = MaskType.COMP_WITH_PREV
+            self.ddim_sampler = None
 
             assert os.path.isdir(self.opts.image_dir)
             self.outer_folder = setup_structure(self.opts.save_dir, self.opts.image_dir)
@@ -162,31 +164,39 @@ class ViewCrafter:
         else:
             latent = None
 
+        if self.ddim_sampler is None:
+            self.ddim_sampler = DDIMSampler(self.diffusion) #if not multiple_cond_cfg else DDIMSampler_multicond(model)
+
         with torch.no_grad(), torch.cuda.amp.autocast():
             # [1,1,c,t,h,w]
             # Original image_guided_synthesis
             # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
             #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
             #                                        self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-            #                                        condition_index, guidance_image=None, latent=None, mask=None)
+            #                                        condition_index, guidance_image=None, latent=None, mask=None, ddim_sampler=self.ddim_sampler)
             #
             # Use same reference picture for all
             # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
             #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
             #                                        self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-            #                                        condition_index, guidance_image=self.guidance_image, latent=None, mask=None)
+            #                                        condition_index, guidance_image=self.guidance_image, latent=None, mask=None, ddim_sampler=self.ddim_sampler)
             #
             # Use same reference picture for all and previous_latent blending
             # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
             #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
             #                                        self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-            #                                        condition_index, guidance_image=self.guidance_image, latent=self.prev_latent, mask=complete_mask)
+            #                                        condition_index, guidance_image=self.guidance_image, latent=self.prev_latent, mask=complete_mask, ddim_sampler=self.ddim_sampler)
             #
             # Use same reference picture for all and first_latent blending
+            #batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
+            #                                       self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
+            #                                       self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
+            #                                       None, guidance_image=self.guidance_image, latent=latent, mask=masks, ddim_sampler=self.ddim_sampler)
+#
             batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
-                                                   self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
-                                                   self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-                                                   None, guidance_image=self.guidance_image, latent=latent, mask=masks)
+                                                     self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
+                                                     self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
+                                                     None, guidance_image=self.guidance_image, ddim_sampler=self.ddim_sampler)
 
             if self.run_number == 0:
                 self.first_latent = current_x0
