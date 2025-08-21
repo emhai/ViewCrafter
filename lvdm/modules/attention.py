@@ -78,13 +78,15 @@ class CrossAttention(nn.Module):
             if image_cross_attention_scale_learnable:
                 self.register_parameter('alpha', nn.Parameter(torch.tensor(0.)) )
 
-
-    def forward(self, x, context=None, mask=None):
+    def forward(self, x, context=None, mask=None, self_attn_query_features_cond=None):
         spatial_self_attn = (context is None)
         k_ip, v_ip, out_ip = None, None, None
 
         h = self.heads
         q = self.to_q(x)
+        # SAFI: if self-attn and a replacement is provided, use it as context for K/V
+        if spatial_self_attn and (self_attn_query_features_cond is not None):
+            context = self_attn_query_features_cond.to(q.device, dtype=q.dtype, non_blocking=True)
         context = default(context, x)
 
         if self.image_cross_attention and not spatial_self_attn:
@@ -143,12 +145,16 @@ class CrossAttention(nn.Module):
                 out = out + self.image_cross_attention_scale * out_ip
         
         return self.to_out(out)
-    
-    def efficient_forward(self, x, context=None, mask=None):
+
+    def efficient_forward(self, x, context=None, mask=None, self_attn_query_features_cond=None):
         spatial_self_attn = (context is None)
         k_ip, v_ip, out_ip = None, None, None
 
         q = self.to_q(x)
+        # SAFI: if self-attn and replacement is provided, use it
+        if spatial_self_attn and (self_attn_query_features_cond is not None):
+            print("in eff CA provide selfattnqueryfeatures")
+            context = self_attn_query_features_cond.to(q.device, dtype=q.dtype, non_blocking=True)
         context = default(context, x)
 
         if self.image_cross_attention and not spatial_self_attn:
@@ -234,14 +240,39 @@ class BasicTransformerBlock(nn.Module):
         input_tuple = (x,)      ## should not be (x), otherwise *input_tuple will decouple x into multiple arguments
         if context is not None:
             input_tuple = (x, context)
+
+        # SAFI: if we are collecting / injecting (non-tensor kwargs), bypass checkpoint and call _forward directly
+        sa_collect = kwargs.get("sa_collect", None)
+        sa_inject_iter = kwargs.get("sa_inject_iter", None)
+        if (sa_collect is not None) or (sa_inject_iter is not None):
+            return self._forward(*input_tuple, mask=mask, sa_collect=sa_collect, sa_inject_iter=sa_inject_iter)
+
         if mask is not None:
             forward_mask = partial(self._forward, mask=mask)
             return checkpoint(forward_mask, (x,), self.parameters(), self.checkpoint)
         return checkpoint(self._forward, input_tuple, self.parameters(), self.checkpoint)
 
+    def _forward(self, x, context=None, mask=None, sa_collect=None, sa_inject_iter=None):
 
-    def _forward(self, x, context=None, mask=None):
-        x = self.attn1(self.norm1(x), context=context if self.disable_self_attn else None, mask=mask) + x
+        # x = self.attn1(self.norm1(x), context=context if self.disable_self_attn else None, mask=mask) + x
+        # x = self.attn2(self.norm2(x), context=context, mask=mask) + x
+        # x = self.ff(self.norm3(x)) + x
+
+        # collect pre-norm features used for self-attention queries
+        x_self = self.norm1(x)
+        if sa_collect is not None:
+            sa_collect.append(x_self.detach().to(torch.float16).cpu())
+            # choose optional previous features for K/V replacement (self-attn only)
+        prev = None
+        if sa_inject_iter is not None:
+            if isinstance(sa_inject_iter, list):
+                if len(sa_inject_iter) > 0:
+                    prev = sa_inject_iter.pop(0)
+            else:
+                prev = sa_inject_iter
+        x = self.attn1(x_self, context=context if self.disable_self_attn else None, mask=mask,
+                       self_attn_query_features_cond=prev) + x
+
         x = self.attn2(self.norm2(x), context=context, mask=mask) + x
         x = self.ff(self.norm3(x)) + x
         return x

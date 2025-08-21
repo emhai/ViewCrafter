@@ -15,6 +15,9 @@ class DDIMSampler(object):
         self.schedule = schedule
         self.counter = 0
         self.prev_frame_preds = None
+        self.first_run = True
+        self.all_sa_collect_cond = []
+        self.all_sa_collect_uncond = []
 
     def register_buffer(self, name, attr):
         if type(attr) == torch.Tensor:
@@ -204,7 +207,7 @@ class DDIMSampler(object):
                                       unconditional_guidance_scale=unconditional_guidance_scale,
                                       unconditional_conditioning=unconditional_conditioning,
                                       mask=mask,x0=x0,fs=fs,guidance_rescale=guidance_rescale, guidance_target=guidance_target,
-                                      temporal_guidance_scale=per_step_weight,
+                                      temporal_guidance_scale=per_step_weight, i=i,
                                       **kwargs)
             
 
@@ -218,7 +221,7 @@ class DDIMSampler(object):
                 intermediates['x_inter'].append(img)
                 intermediates['pred_x0'].append(pred_x0)
 
-        self.prev_frame_preds = current_frame_preds.copy()
+        # self.prev_frame_preds = current_frame_preds.copy()
         return img, intermediates
 
     @torch.no_grad()
@@ -226,7 +229,7 @@ class DDIMSampler(object):
                       temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None,
                       unconditional_guidance_scale=1., unconditional_conditioning=None,
                       uc_type=None, conditional_guidance_scale_temporal=None,mask=None,x0=None,guidance_rescale=0.0,
-                      guidance_target=None, temporal_guidance_scale=0.0, **kwargs):
+                      guidance_target=None, temporal_guidance_scale=0.0, i=0, **kwargs):
         b, *_, device = *x.shape, x.device
         if x.dim() == 5:
             is_video = True
@@ -238,8 +241,20 @@ class DDIMSampler(object):
         else:
             ### do_classifier_free_guidance
             if isinstance(c, torch.Tensor) or isinstance(c, dict):
-                e_t_cond = self.model.apply_model(x, t, c, **kwargs)
-                e_t_uncond = self.model.apply_model(x, t, unconditional_conditioning, **kwargs)
+                if self.first_run:
+                    sa_collect_cond, sa_collect_uncond = [], []
+
+                    e_t_cond = self.model.apply_model(x, t, c, sa_collect=sa_collect_cond, **kwargs)
+                    e_t_uncond = self.model.apply_model(x, t, unconditional_conditioning, sa_collect=sa_collect_uncond, **kwargs)
+
+                    self.all_sa_collect_cond.append(sa_collect_cond)
+                    self.all_sa_collect_uncond.append(sa_collect_uncond)
+
+                else:
+                    inj_cond = self.all_sa_collect_cond[i]
+                    inj_uncond = self.all_sa_collect_uncond[i]
+                    e_t_cond = self.model.apply_model(x, t, c, sa_inject_iter=inj_cond)
+                    e_t_uncond = self.model.apply_model(x, t, unconditional_conditioning, sa_inject_iter=inj_uncond)
             else:
                 raise NotImplementedError
 
@@ -278,9 +293,8 @@ class DDIMSampler(object):
             pred_x0 = (x - sqrt_one_minus_at * e_t) / a_t.sqrt()
         else:
             pred_x0 = self.model.predict_start_from_z_and_v(x, t, model_output)
-        
 
-
+        guidance_target = None
         if guidance_target is not None and temporal_guidance_scale > 0.0:
             print("asdfhlaskdjf")
             with torch.enable_grad():

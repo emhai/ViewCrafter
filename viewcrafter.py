@@ -166,7 +166,10 @@ class ViewCrafter:
 
         if self.ddim_sampler is None:
             self.ddim_sampler = DDIMSampler(self.diffusion) #if not multiple_cond_cfg else DDIMSampler_multicond(model)
+            self.ddim_sampler.first_run = True
 
+        if self.run_number > 0:
+            self.ddim_sampler.first_run = False
         with torch.no_grad(), torch.cuda.amp.autocast():
             # [1,1,c,t,h,w]
             # Original image_guided_synthesis

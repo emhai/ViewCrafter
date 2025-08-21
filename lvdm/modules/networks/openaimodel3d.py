@@ -33,12 +33,12 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
     support it as an extra input.
     """
 
-    def forward(self, x, emb, context=None, batch_size=None):
+    def forward(self, x, emb, context=None, batch_size=None, **kwargs):
         for layer in self:
             if isinstance(layer, TimestepBlock):
                 x = layer(x, emb, batch_size=batch_size)
             elif isinstance(layer, SpatialTransformer):
-                x = layer(x, context)
+                x = layer(x, context, **kwargs)
             elif isinstance(layer, TemporalTransformer):
                 x = rearrange(x, '(b f) c h w -> b c f h w', b=batch_size)
                 x = layer(x, context)
@@ -581,9 +581,9 @@ class UNetModel(nn.Module):
         adapter_idx = 0
         hs = []
         for id, module in enumerate(self.input_blocks):
-            h = module(h, emb, context=context, batch_size=b)
+            h = module(h, emb, context=context, batch_size=b, **kwargs)
             if id ==0 and self.addition_attention:
-                h = self.init_attn(h, emb, context=context, batch_size=b)
+                h = self.init_attn(h, emb, context=context, batch_size=b, **kwargs)
             ## plug-in adapter features
             if ((id+1)%3 == 0) and features_adapter is not None:
                 h = h + features_adapter[adapter_idx]
@@ -592,10 +592,10 @@ class UNetModel(nn.Module):
         if features_adapter is not None:
             assert len(features_adapter)==adapter_idx, 'Wrong features_adapter'
 
-        h = self.middle_block(h, emb, context=context, batch_size=b)
+        h = self.middle_block(h, emb, context=context, batch_size=b, **kwargs)
         for module in self.output_blocks:
             h = torch.cat([h, hs.pop()], dim=1)
-            h = module(h, emb, context=context, batch_size=b)
+            h = module(h, emb, context=context, batch_size=b, **kwargs)
         h = h.type(x.dtype)
         y = self.out(h)
         
