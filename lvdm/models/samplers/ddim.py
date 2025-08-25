@@ -14,7 +14,6 @@ class DDIMSampler(object):
         self.ddpm_num_timesteps = model.num_timesteps
         self.schedule = schedule
         self.counter = 0
-        self.prev_frame_preds = None
 
     def register_buffer(self, name, attr):
         if type(attr) == torch.Tensor:
@@ -168,16 +167,9 @@ class DDIMSampler(object):
             iterator = time_range
 
         clean_cond = kwargs.pop("clean_cond", False)
-        blend_latents = True
 
         # cond_copy, unconditional_conditioning_copy = copy.deepcopy(cond), copy.deepcopy(unconditional_conditioning)
-        current_frame_preds = []
-        per_step_weight = 100.0
         for i, step in enumerate(iterator):
-
-            if i>25:
-                per_step_weight = 0
-
             index = total_steps - i - 1
 
             ts = torch.full((b,), step, device=device, dtype=torch.long)
@@ -187,15 +179,13 @@ class DDIMSampler(object):
                 assert x0 is not None
                 if clean_cond:
                     img_orig = x0
-                elif blend_latents:
-                    print("here")
-                    img_orig = self.prev_frame_preds[i]
                 else:
                     img_orig = self.model.q_sample(x0, ts)  # TODO: deterministic forward pass? <ddim inversion>
                 # img = img_orig * mask + (1. - mask) * img # keep original & modify use img
                 img = img_orig * (1. - mask) + mask * img # keep original & modify use img swapped
 
-            guidance_target = self.prev_frame_preds[i] if self.prev_frame_preds is not None else None
+
+
 
             outs = self.p_sample_ddim(img, cond, ts, index=index, use_original_steps=ddim_use_original_steps,
                                       quantize_denoised=quantize_denoised, temperature=temperature,
@@ -203,14 +193,11 @@ class DDIMSampler(object):
                                       corrector_kwargs=corrector_kwargs,
                                       unconditional_guidance_scale=unconditional_guidance_scale,
                                       unconditional_conditioning=unconditional_conditioning,
-                                      mask=mask,x0=x0,fs=fs,guidance_rescale=guidance_rescale, guidance_target=guidance_target,
-                                      temporal_guidance_scale=per_step_weight,
+                                      mask=mask,x0=x0,fs=fs,guidance_rescale=guidance_rescale,
                                       **kwargs)
             
 
             img, pred_x0 = outs
-            current_frame_preds.append(pred_x0)
-
             if callback: callback(i)
             if img_callback: img_callback(pred_x0, i)
 
@@ -218,15 +205,13 @@ class DDIMSampler(object):
                 intermediates['x_inter'].append(img)
                 intermediates['pred_x0'].append(pred_x0)
 
-        self.prev_frame_preds = current_frame_preds.copy()
         return img, intermediates
 
     @torch.no_grad()
     def p_sample_ddim(self, x, c, t, index, repeat_noise=False, use_original_steps=False, quantize_denoised=False,
                       temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None,
                       unconditional_guidance_scale=1., unconditional_conditioning=None,
-                      uc_type=None, conditional_guidance_scale_temporal=None,mask=None,x0=None,guidance_rescale=0.0,
-                      guidance_target=None, temporal_guidance_scale=0.0, **kwargs):
+                      uc_type=None, conditional_guidance_scale_temporal=None,mask=None,x0=None,guidance_rescale=0.0,**kwargs):
         b, *_, device = *x.shape, x.device
         if x.dim() == 5:
             is_video = True
@@ -278,24 +263,6 @@ class DDIMSampler(object):
             pred_x0 = (x - sqrt_one_minus_at * e_t) / a_t.sqrt()
         else:
             pred_x0 = self.model.predict_start_from_z_and_v(x, t, model_output)
-        
-
-
-        if guidance_target is not None and temporal_guidance_scale > 0.0:
-            print("asdfhlaskdjf")
-            with torch.enable_grad():
-                # Create a differentiable copy of the current prediction
-                pred_x0_grad = pred_x0.clone().detach().requires_grad_(True)
-
-                # Calculate MSE loss against the target from the previous frame
-                loss = torch.nn.functional.mse_loss(pred_x0_grad, guidance_target)
-                loss.backward()
-
-                # Get the gradient and use it to correct the prediction
-                grad = pred_x0_grad.grad.detach()
-                pred_x0 = pred_x0 - grad * temporal_guidance_scale
-
-        e_t = (x - pred_x0 * a_t.sqrt()) / sqrt_one_minus_at
 
         if self.model.use_dynamic_rescale:
             scale_t = torch.full(size, self.ddim_scale_arr[index], device=device)
@@ -305,9 +272,9 @@ class DDIMSampler(object):
 
         if quantize_denoised:
             pred_x0, _, *_ = self.model.first_stage_model.quantize(pred_x0)
-            # direction pointing to x_t
+        # direction pointing to x_t
+        dir_xt = (1. - a_prev - sigma_t**2).sqrt() * e_t
 
-        dir_xt = (1. - a_prev - sigma_t ** 2).sqrt() * e_t
         noise = sigma_t * noise_like(x.shape, device, repeat_noise) * temperature
         if noise_dropout > 0.:
             noise = torch.nn.functional.dropout(noise, p=noise_dropout)
