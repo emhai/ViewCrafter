@@ -16,6 +16,66 @@ from lvdm.common import (
 )
 from lvdm.basics import zero_module
 
+class MSATracker:
+
+    def __init__(self, start_step=4, start_layer=10, layer_idx=None, step_idx=None, total_steps=50, spatial_only=False):
+        """
+        Tracker similar to MasaCtrls MutualSelfAttentionControl class.
+        Mutual self-attention control for Stable-Diffusion model
+            Args:
+                start_step: the step to start mutual self-attention control
+                start_layer: the layer to start mutual self-attention control
+                layer_idx: list of the layers to apply mutual self-attention control
+                step_idx: list the steps to apply mutual self-attention control
+                total_steps: the total number of steps
+                spatial_only: whether to apply spatial self-attention only control or include temporal self-attention also
+        """
+        self.total_steps = total_steps
+        self.total_layers = 16 # todo, find out? counted myself, its 16.
+        self.start_step = start_step
+        self.start_layer = start_layer
+        self.layer_idx = layer_idx if layer_idx is not None else list(range(start_layer, self.total_layers))
+        self.step_idx = step_idx if step_idx is not None else list(range(start_step, total_steps))
+        self.spatial_only = spatial_only
+        print("Mutual Self-Attention Control at denoising steps: ", self.step_idx)
+        print("Mutual Self-Attention Control at U-Net layers: ", self.layer_idx)
+
+        self.cur_step = 0  # set by sampler each DDIM step
+        self.cur_attn_layer = 0  # auto-incremented per Spatial attn1 call
+
+    def reset_att_layer(self):
+        """Call once per UNet forward (resets block counter)."""
+        print("Resetting attention layer to 0")
+        self.cur_attn_layer = 0
+
+    def mark_attn_layer(self):
+        """Call at each Spatial attn1; returns the zero-based index then increments."""
+
+        idx = self.cur_attn_layer
+        print(f"Current attention layer: {idx}")
+        self.cur_attn_layer += 1
+        return idx
+
+    def active_for(self, is_spatial):
+        """Is SAFI enabled at current step & block?"""
+
+        if self.spatial_only and not is_spatial:
+            return False
+        # step gate
+        if self.step_idx is not None:
+            step_ok = (self.cur_step in self.step_idx)
+        else:
+            step_ok = (self.cur_step >= self.start_step)
+        if not step_ok:
+            return False
+        # block gate (spatial only)
+        if is_spatial:
+            if self.layer_idx is not None:
+                block_ok = (self.cur_att_layer >= 0) and (self.cur_att_layer in self.layer_idx)
+            else:
+                block_ok = (self.cur_att_layer >= self.start_layer)
+            return block_ok
+        return False
 
 class RelativePosition(nn.Module):
     """ https://github.com/evelinehong/Transformer_Relative_Position_PyTorch/blob/master/relative_position.py """
@@ -78,12 +138,22 @@ class CrossAttention(nn.Module):
                 self.register_parameter('alpha', nn.Parameter(torch.tensor(0.)) )
 
 
-    def forward(self, x, context=None, mask=None):
-        spatial_self_attn = (context is None)
+    def forward(self, x, context=None, mask=None,
+                self_attn_query_features_cond=None,
+                self_attn_collector=None,
+                return_spatial_hw=None):
+
+        spatial_self_attn = (context is None) # no cross-attn
         k_ip, v_ip, out_ip = None, None, None
 
         h = self.heads
         q = self.to_q(x)
+
+        # change context for pure self-attention
+        if spatial_self_attn and (self_attn_query_features_cond is not None):
+            print("Replacing context for pure self-attention")
+            context = self_attn_query_features_cond.to(q.device, dtype=q.dtype, non_blocking=True)
+
         context = default(context, x)
 
         if self.image_cross_attention and not spatial_self_attn:
@@ -140,10 +210,31 @@ class CrossAttention(nn.Module):
                 out = out + self.image_cross_attention_scale * out_ip * (torch.tanh(self.alpha)+1)
             else:
                 out = out + self.image_cross_attention_scale * out_ip
-        
-        return self.to_out(out)
+
+        y = self.to_out(out)
+
+        # collect self-attention
+        if spatial_self_attn and (self_attn_collector is not None):
+            print("Collecting self-attention")
+            # average heads back: (B, Nq, Nk)
+            attn_map = rearrange(sim, '(b h) i j -> b h i j', h=h).mean(dim=1).detach()
+            self_attn_collector.append(attn_map.to(torch.float16, non_blocking=True).cpu())
+            # optional immediate free hint
+            del attn_map
+        return y
     
-    def efficient_forward(self, x, context=None, mask=None):
+    def efficient_forward(self, x, context=None, mask=None,
+                          self_attn_query_features_cond=None,
+                          self_attn_collector=None,
+                          return_spatial_hw=None):
+
+        if self_attn_collector is not None:
+            print("Rerouting to forward")
+            return self.forward(x, context=context, mask=mask,
+                                self_attn_query_features_cond=self_attn_query_features_cond,
+                                self_attn_collector=self_attn_collector,
+                                return_spatial_hw=return_spatial_hw)
+
         spatial_self_attn = (context is None)
         k_ip, v_ip, out_ip = None, None, None
 
@@ -212,7 +303,8 @@ class CrossAttention(nn.Module):
 class BasicTransformerBlock(nn.Module):
 
     def __init__(self, dim, n_heads, d_head, dropout=0., context_dim=None, gated_ff=True, checkpoint=True,
-                disable_self_attn=False, attention_cls=None, video_length=None, image_cross_attention=False, image_cross_attention_scale=1.0, image_cross_attention_scale_learnable=False, text_context_len=77):
+                disable_self_attn=False, attention_cls=None, video_length=None, image_cross_attention=False, image_cross_attention_scale=1.0,
+                 image_cross_attention_scale_learnable=False, text_context_len=77):
         super().__init__()
         attn_cls = CrossAttention if attention_cls is None else attention_cls
         self.disable_self_attn = disable_self_attn
@@ -238,9 +330,47 @@ class BasicTransformerBlock(nn.Module):
             return checkpoint(forward_mask, (x,), self.parameters(), self.checkpoint)
         return checkpoint(self._forward, input_tuple, self.parameters(), self.checkpoint)
 
+    def _forward(self, x, context=None, mask=None, sa_collect=None, sa_inject=None,
+                 collect_self_attn=False, self_attn_bucket=None, return_spatial_hw=None,
+                 is_spatial=False, safi_tracker=None, **kwargs):
 
-    def _forward(self, x, context=None, mask=None):
-        x = self.attn1(self.norm1(x), context=context if self.disable_self_attn else None, mask=mask) + x
+        # original _forward(self, x, context=None, mask=None):
+        # x = self.attn1(self.norm1(x), context=context if self.disable_self_attn else None, mask=mask) + x
+        # x = self.attn2(self.norm2(x), context=context, mask=mask) + x
+        # x = self.ff(self.norm3(x)) + x
+
+        # self-attention for both SpatialTransformer and TemporalTransformer
+        x_norm = self.norm1(x)
+
+        layer_idx = None
+        gate = False
+        if safi_tracker is not None:
+            layer_idx = safi_tracker.mark_attn_layer() # returns current idx and adds 1 to idx
+            gate = safi_tracker.active_for(is_spatial) # add sa control right now? (layer, step, spatial/temporal)
+            print(f"Currently in layer {layer_idx} and gate is {gate}")
+
+        # self-attention collect
+        if gate and sa_collect is not None:
+            sa_collect.append(x_norm.detach().to(torch.float16).cpu())
+            print("Collecting x_norm")
+
+        # self-attention inject
+        prev = None
+        if sa_inject is not None and gate:
+            if isinstance(sa_inject, list) and len(sa_inject) > 0:
+                prev = sa_inject.pop(0)
+            else:
+                prev = sa_inject
+
+            if prev is not None and (prev.device != x_norm.device or prev.dtype != x_norm.dtype):
+                prev = prev.to(x_norm.device, dtype=x_norm.dtype, non_blocking=True)
+
+        x = self.attn1(x_norm, context=context if self.disable_self_attn else None, mask=mask,
+                       self_attn_query_features_cond=prev if gate else None,
+                       self_attn_collector=(self_attn_bucket if (collect_self_attn and gate) else None),
+                       return_spatial_hw=return_spatial_hw if is_spatial else None) + x
+
+        # cross-attention for SpatialTransformer, self-attention for TemporalTransformer
         x = self.attn2(self.norm2(x), context=context, mask=mask) + x
         x = self.ff(self.norm3(x)) + x
         return x
@@ -301,7 +431,7 @@ class SpatialTransformer(nn.Module):
         if self.use_linear:
             x = self.proj_in(x)
         for i, block in enumerate(self.transformer_blocks):
-            x = block(x, context=context, **kwargs)
+            x = block(x, context=context, is_spatial=True, **kwargs)
         if self.use_linear:
             x = self.proj_out(x)
         x = rearrange(x, 'b (h w) c -> b c h w', h=h, w=w).contiguous()
@@ -362,7 +492,7 @@ class TemporalTransformer(nn.Module):
             self.proj_out = zero_module(nn.Linear(inner_dim, in_channels))
         self.use_linear = use_linear
 
-    def forward(self, x, context=None):
+    def forward(self, x, context=None, **kwargs):
         b, c, t, h, w = x.shape
         x_in = x
         x = self.norm(x)
@@ -387,7 +517,7 @@ class TemporalTransformer(nn.Module):
         if self.only_self_att:
             ## note: if no context is given, cross-attention defaults to self-attention
             for i, block in enumerate(self.transformer_blocks):
-                x = block(x, mask=mask)
+                x = block(x, mask=mask, is_spatial=False, **kwargs)
             x = rearrange(x, '(b hw) t c -> b hw t c', b=b).contiguous()
         else:
             x = rearrange(x, '(b hw) t c -> b hw t c', b=b).contiguous()
@@ -399,7 +529,7 @@ class TemporalTransformer(nn.Module):
                         context[j],
                         't l con -> (t r) l con', r=(h * w) // t, t=t).contiguous()
                     ## note: causal mask will not applied in cross-attention case
-                    x[j] = block(x[j], context=context_j)
+                    x[j] = block(x[j], context=context_j, is_spatial=False, **kwargs)
         
         if self.use_linear:
             x = self.proj_out(x)

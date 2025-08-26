@@ -755,6 +755,15 @@ class ViewCrafter:
         model.eval()
         self.diffusion = model
 
+        def print_modules_with_depth(model, max_depth=3, prefix='', depth=0):
+            if depth > max_depth:
+                return
+            print(f"{'  ' * depth}{prefix}{model.__class__.__name__}")
+            for name, child in model.named_children():
+                print_modules_with_depth(child, max_depth, prefix=name + ': ', depth=depth + 1)
+
+        print_modules_with_depth(model, max_depth=7)
+
         h, w = self.opts.height // 8, self.opts.width // 8 # latent size
         channels = model.model.diffusion_model.out_channels
         n_frames = self.opts.video_length
