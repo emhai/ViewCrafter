@@ -85,6 +85,7 @@ class DDIMSampler(object):
                fs=None,
                timestep_spacing='uniform', #uniform_trailing for starting from last timestep
                guidance_rescale=0.0,
+               conds_z0=0,
                **kwargs
                ):
         
@@ -116,7 +117,7 @@ class DDIMSampler(object):
                                                     callback=callback,
                                                     img_callback=img_callback,
                                                     quantize_denoised=quantize_x0,
-                                                    mask=mask, x0=x0,
+                                                    mask=mask, x0=x0, conds_z0=conds_z0,
                                                     ddim_use_original_steps=False,
                                                     noise_dropout=noise_dropout,
                                                     temperature=temperature,
@@ -134,7 +135,7 @@ class DDIMSampler(object):
         return samples, intermediates
 
     @torch.no_grad()
-    def ddim_sampling(self, cond, shape,
+    def ddim_sampling(self, cond, shape, conds_z0=None,
                       x_T=None, ddim_use_original_steps=False,
                       callback=None, timesteps=None, quantize_denoised=False,
                       mask=None, x0=None, img_callback=None, log_every_t=100,
@@ -167,7 +168,7 @@ class DDIMSampler(object):
             iterator = time_range
 
         clean_cond = kwargs.pop("clean_cond", False)
-
+        clean_cond = True
         # cond_copy, unconditional_conditioning_copy = copy.deepcopy(cond), copy.deepcopy(unconditional_conditioning)
         for i, step in enumerate(iterator):
             index = total_steps - i - 1
@@ -178,7 +179,7 @@ class DDIMSampler(object):
             if mask is not None:
                 assert x0 is not None
                 if clean_cond:
-                    img_orig = x0
+                    img_orig = conds_z0[i]
                 else:
                     img_orig = self.model.q_sample(x0, ts)  # TODO: deterministic forward pass? <ddim inversion>
                 # img = img_orig * mask + (1. - mask) * img # keep original & modify use img
