@@ -17,6 +17,11 @@ class DDIMSampler(object):
         self.schedule = schedule
         self.counter = 0
 
+        self.all_sa_collect_cond = []
+        self.all_sa_collect_uncond = []
+
+        self.first_run = True
+
     def register_buffer(self, name, attr):
         if type(attr) == torch.Tensor:
             if attr.device != torch.device("cuda"):
@@ -171,6 +176,8 @@ class DDIMSampler(object):
         clean_cond = kwargs.pop("clean_cond", False)
 
         msa_tracker = MSATracker(start_step=4, start_layer=10)  # from MasaCtrl
+        # msa_tracker = MSATracker(start_step=0, start_layer=7) # from Pix2Video
+        # msa_tracker = MSATracker(start_step=4, start_layer=10)
 
         # cond_copy, unconditional_conditioning_copy = copy.deepcopy(cond), copy.deepcopy(unconditional_conditioning)
         for i, step in enumerate(iterator):
@@ -198,7 +205,7 @@ class DDIMSampler(object):
                                       corrector_kwargs=corrector_kwargs,
                                       unconditional_guidance_scale=unconditional_guidance_scale,
                                       unconditional_conditioning=unconditional_conditioning,
-                                      mask=mask,x0=x0,fs=fs,guidance_rescale=guidance_rescale, msa_tracker=msa_tracker,
+                                      mask=mask,x0=x0,fs=fs, guidance_rescale=guidance_rescale, msa_tracker=msa_tracker,
                                       **kwargs)
             
 
@@ -231,13 +238,38 @@ class DDIMSampler(object):
             ### do_classifier_free_guidance
             if isinstance(c, torch.Tensor) or isinstance(c, dict):
 
-                if msa_tracker is not None:
-                    msa_tracker.reset_att_layer()
-                e_t_cond = self.model.apply_model(x, t, c, msa_tracker=msa_tracker, **kwargs)
+                sa_collect = None
+                sa_inject = None
 
-                if msa_tracker is not None:
-                    msa_tracker.reset_att_layer()
-                e_t_uncond = self.model.apply_model(x, t, unconditional_conditioning, msa_tracker=msa_tracker, **kwargs)
+                # first run, no collected sa
+                if self.first_run:
+                    sa_collect = []
+                else:
+                    sa_inject = self.all_sa_collect_cond[msa_tracker.cur_step].copy()
+
+                msa_tracker.reset_att_layer()
+
+                e_t_cond = self.model.apply_model(x, t, c, sa_collect=sa_collect, sa_inject=sa_inject, msa_tracker=msa_tracker, **kwargs)
+
+                if self.first_run:
+                    self.all_sa_collect_cond.append(sa_collect)
+
+
+                sa_collect = None
+                sa_inject = None
+                if self.first_run:
+                    sa_collect = []
+                else:
+                    sa_inject = self.all_sa_collect_uncond[msa_tracker.cur_step].copy()
+
+                assert sa_collect is None or sa_inject is None, "cant have both"
+
+                msa_tracker.reset_att_layer()
+                e_t_uncond = self.model.apply_model(x, t, unconditional_conditioning, sa_collect=sa_collect, sa_inject=sa_inject, msa_tracker=msa_tracker, **kwargs)
+
+                if self.first_run:
+                    self.all_sa_collect_uncond.append(sa_collect)
+
             else:
                 raise NotImplementedError
 

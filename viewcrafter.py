@@ -62,7 +62,7 @@ class ViewCrafter:
             self.first_image = None
             self.first_latent = None
             self.run_number = 0
-            self.mask_type = MaskType.COMP_WITH_FIRST
+            self.mask_type = MaskType.EASI3R_PREV
             self.ddim_sampler = None
 
             assert os.path.isdir(self.opts.image_dir)
@@ -176,10 +176,10 @@ class ViewCrafter:
             #                                        condition_index, guidance_image=None, latent=None, mask=None, ddim_sampler=self.ddim_sampler)
             #
             # Use same reference picture for all
-            batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
-                                                   self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
-                                                   self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-                                                   None, guidance_image=self.guidance_image, latent=None, mask=None, ddim_sampler=self.ddim_sampler)
+            # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
+            #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
+            #                                        self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
+            #                                        None, guidance_image=self.guidance_image, latent=None, mask=None, ddim_sampler=self.ddim_sampler)
 
             # Use same reference picture for all and previous_latent blending
             # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
@@ -188,16 +188,17 @@ class ViewCrafter:
             #                                        condition_index, guidance_image=self.guidance_image, latent=self.prev_latent, mask=complete_mask, ddim_sampler=self.ddim_sampler)
             #
             # Use same reference picture for all and first_latent blending
-            # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
-            #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
-            #                                        self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-            #                                        None, guidance_image=self.guidance_image, latent=latent, mask=masks, ddim_sampler=self.ddim_sampler)
+            batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
+                                                   self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
+                                                   self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
+                                                   None, guidance_image=self.guidance_image, latent=latent, mask=masks, ddim_sampler=self.ddim_sampler)
 
 
             if self.run_number == 0:
                 self.first_latent = current_x0
 
             self.prev_latent = current_x0
+            self.ddim_sampler.first_run = False
 
             # save_results_seperate(batch_samples[0], self.opts.save_dir, fps=8)
             # torch.Size([1, 3, 25, 576, 1024]) [-1,1]
@@ -762,7 +763,7 @@ class ViewCrafter:
             for name, child in model.named_children():
                 print_modules_with_depth(child, max_depth, prefix=name + ': ', depth=depth + 1)
 
-        print_modules_with_depth(model, max_depth=7)
+        # print_modules_with_depth(model, max_depth=7)
 
         h, w = self.opts.height // 8, self.opts.width // 8 # latent size
         channels = model.model.diffusion_model.out_channels

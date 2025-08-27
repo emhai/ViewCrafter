@@ -45,14 +45,14 @@ class MSATracker:
 
     def reset_att_layer(self):
         """Call once per UNet forward (resets block counter)."""
-        print("Resetting attention layer to 0")
+        # print(f"Resetting attention layer to 0 at step {self.cur_step}")
         self.cur_attn_layer = 0
 
     def mark_attn_layer(self):
         """Call at each Spatial attn1; returns the zero-based index then increments."""
 
         idx = self.cur_attn_layer
-        print(f"Current attention layer: {idx}")
+        # print(f"Current attention layer: {idx}")
         self.cur_attn_layer += 1
         return idx
 
@@ -69,13 +69,16 @@ class MSATracker:
         if not step_ok:
             return False
         # block gate (spatial only)
-        if is_spatial:
-            if self.layer_idx is not None:
-                block_ok = (self.cur_att_layer >= 0) and (self.cur_att_layer in self.layer_idx)
-            else:
-                block_ok = (self.cur_att_layer >= self.start_layer)
-            return block_ok
-        return False
+
+        if self.layer_idx is not None:
+            layer_ok = (self.cur_attn_layer // 2 >= 0) and (self.cur_attn_layer in self.layer_idx)
+        else:
+            layer_ok = (self.cur_attn_layer >= self.start_layer)
+
+
+        # print(f"layer ok in msa_controller {layer_ok}")
+        return layer_ok
+
 
 class RelativePosition(nn.Module):
     """ https://github.com/evelinehong/Transformer_Relative_Position_PyTorch/blob/master/relative_position.py """
@@ -151,7 +154,7 @@ class CrossAttention(nn.Module):
 
         # change context for pure self-attention
         if spatial_self_attn and (self_attn_query_features_cond is not None):
-            print("Replacing context for pure self-attention")
+            # print("Replacing context for pure self-attention")
             context = self_attn_query_features_cond.to(q.device, dtype=q.dtype, non_blocking=True)
 
         context = default(context, x)
@@ -319,20 +322,23 @@ class BasicTransformerBlock(nn.Module):
         self.norm3 = nn.LayerNorm(dim)
         self.checkpoint = checkpoint
 
-
     def forward(self, x, context=None, mask=None, **kwargs):
         ## implementation tricks: because checkpointing doesn't support non-tensor (e.g. None or scalar) arguments
         input_tuple = (x,)      ## should not be (x), otherwise *input_tuple will decouple x into multiple arguments
         if context is not None:
             input_tuple = (x, context)
         if mask is not None:
-            forward_mask = partial(self._forward, mask=mask)
-            return checkpoint(forward_mask, (x,), self.parameters(), self.checkpoint)
-        return checkpoint(self._forward, input_tuple, self.parameters(), self.checkpoint)
+            f = partial(self._forward, mask=mask, **kwargs)
+        else:
+            f = partial(self._forward, **kwargs)
+
+        # Run through your checkpoint wrapper with the same input_tuple
+        return checkpoint(f, input_tuple, self.parameters(), self.checkpoint)
+
 
     def _forward(self, x, context=None, mask=None, sa_collect=None, sa_inject=None,
                  collect_self_attn=False, self_attn_bucket=None, return_spatial_hw=None,
-                 is_spatial=False, safi_tracker=None, **kwargs):
+                 is_spatial=False, msa_tracker=None, **kwargs):
 
         # original _forward(self, x, context=None, mask=None):
         # x = self.attn1(self.norm1(x), context=context if self.disable_self_attn else None, mask=mask) + x
@@ -344,15 +350,16 @@ class BasicTransformerBlock(nn.Module):
 
         layer_idx = None
         gate = False
-        if safi_tracker is not None:
-            layer_idx = safi_tracker.mark_attn_layer() # returns current idx and adds 1 to idx
-            gate = safi_tracker.active_for(is_spatial) # add sa control right now? (layer, step, spatial/temporal)
-            print(f"Currently in layer {layer_idx} and gate is {gate}")
+        # print(f"safi tracker  {msa_tracker}")
+        if msa_tracker is not None:
+            layer_idx = msa_tracker.mark_attn_layer() # returns current idx and adds 1 to idx
+            gate = msa_tracker.active_for(is_spatial) # add sa control right now? (layer, step, spatial/temporal)
+            # print(f"Currently in layer {layer_idx} and gate is {gate}")
 
         # self-attention collect
         if gate and sa_collect is not None:
             sa_collect.append(x_norm.detach().to(torch.float16).cpu())
-            print("Collecting x_norm")
+            # print("Collecting x_norm")
 
         # self-attention inject
         prev = None
