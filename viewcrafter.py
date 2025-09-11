@@ -54,6 +54,7 @@ class ViewCrafter:
         # initialize ref images, pcd
 
         if self.opts.mode in ['single_video_interp', 'multi_video_interp']:
+
             self.predicted_poses = None
             self.predicted_focals = None
             self.guidance_image = None
@@ -64,11 +65,13 @@ class ViewCrafter:
             self.first_latent = None
             self.first_latents = None
             self.run_number = 0
-            self.mask_type = MaskType.EASI3R_PREV
+            self.mask_type = MaskType.COMP_WITH_PREV
             self.ddim_sampler = None
 
             assert os.path.isdir(self.opts.image_dir)
             self.outer_folder = setup_structure(self.opts.save_dir, self.opts.image_dir)
+
+            self.run_easi3r()
 
             if self.opts.mode == 'single_video_interp': # todo for multi / easi3r in viewcrafter ausführen
                 # load pickle
@@ -119,6 +122,55 @@ class ViewCrafter:
             self.scene = scene.clean_pointcloud()
         else:
             self.scene = scene
+
+    def run_easi3r(self):
+
+        easi3r_masks_dir = os.path.join(self.opts.save_dir, EASI3R_MASKS_DIR)
+        input_masks_dir = os.path.join(self.opts.save_dir, EASI3R_MASKS_INPUT_DIR)
+        os.mkdir(easi3r_masks_dir)
+        os.mkdir(input_masks_dir)
+
+        env = os.environ.copy()
+        env["CUDA_VISIBLE_DEVICES"] = "0"
+        env["OPENBLAS_NUM_THREADS"] = "1"
+
+        for video in os.listdir(os.path.join(self.opts.save_dir, ORIGINAL_VIDEOS_DIR)):
+            name, ext = os.path.splitext(video)
+
+            video_path = os.path.join(self.opts.save_dir, ORIGINAL_VIDEOS_DIR, video)
+
+            cmd = (f"conda run -n easi3r python -u {self.opts.easi3r_path}/demo.py "
+                   f"--weights {self.opts.easi3r_path}/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth "
+                   f"--seq_name {name} "
+                   f"--input {video_path} "
+                   f"--output_dir {easi3r_masks_dir} "
+                   f"--sam2_mask_refine "
+                   f"--num_frames {self.opts.n_frames} ")
+
+            print(">> Running Easi3r")
+
+            proc = subprocess.Popen(cmd, env=env, shell=True, cwd=self.opts.easi3r_path)
+            ret = proc.wait()
+            if ret != 0:
+                raise RuntimeError(f"Easi3R failed with exit code {ret}")
+
+        mask_folders = sorted(os.listdir(easi3r_masks_dir))
+        folder_paths = [os.path.join(easi3r_masks_dir, folder, "frames_dynamic_masks") for folder in mask_folders]
+        folder_files = [sorted(os.listdir(folder)) for folder in folder_paths]
+
+        num_frames = len(folder_files[0])
+        num_folders = len(folder_files)
+
+        for frame_counter in range(num_frames):
+            combined_mask_folder = os.path.join(input_masks_dir, str(frame_counter))
+            os.mkdir(combined_mask_folder)
+
+            for i in range(num_folders):
+                src_path = os.path.join(folder_paths[i], folder_files[i][frame_counter])
+                dest_path = os.path.join(combined_mask_folder, f"{i}.png")
+                shutil.copyfile(src_path, dest_path)
+
+        print("done")
 
     def render_pcd(self, pts3d ,imgs, masks, views, renderer, device,nbv=False):
         
@@ -768,11 +820,11 @@ class ViewCrafter:
         self.noise_shape = [self.opts.bs, channels, n_frames, h, w]
 
     def setup_dust3r(self):
-        assert "DUSt3R" in self.opts.model_path
+        assert "DUSt3R" in self.opts.model_path, "wrong checkpoint"
         self.dust3r = load_model(self.opts.model_path, self.device)
 
     def setup_mast3r(self):
-        assert "MASt3R" in self.opts.model_path
+        assert "MASt3R" in self.opts.model_path, "wrong checkpoint"
         self.dust3r = AsymmetricMASt3R.from_pretrained(self.opts.model_path).to(self.device)
 
     def setup_guidance(self):
