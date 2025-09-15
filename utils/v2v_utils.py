@@ -8,14 +8,16 @@ import torch
 from PIL import Image
 import torch.nn.functional as F
 import torchvision.transforms as transforms
+from pathlib import Path
 from skimage import data, filters
 from torch.ao.nn.quantized.functional import threshold
 from torch.utils.tensorboard.summary import video
 
 from configs.v2v_config import *
+from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip, ffmpeg_resize
 
 import matplotlib.pyplot as plt
-from utils.pvd_utils import save_pointcloud_with_normals, get_pc
+from utils.pvd_utils import save_pointcloud_with_normals, get_pc, center_crop_image
 
 
 def save_masks(mask_list, save_dir, visualize=True, save=True):
@@ -57,65 +59,67 @@ def save_depth(depth_list, save_dir, visualize=True, save=True):
 def extract_frames(video_path, frames_path):
     print(f"Extracting frames from {video_path}")
 
-    outer_path = video_path.split("/")[0: -2]
-    stdout_path = os.path.join("/", *outer_path, OUTPUT_LOG_FILE)
-
-    ffmpeg_command = ['ffmpeg', '-i', os.path.join(video_path, video_path), f"{frames_path}/%05d.png"]
-    with open(stdout_path, "a") as f:
-        subprocess.run(ffmpeg_command, stdout=f, stderr=subprocess.STDOUT)
+    #  '-hide_banner', '-log_level', 'error'
+    ffmpeg_command = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-i', video_path.as_posix(), f"{frames_path.as_posix()}/%05d.png"]
+    subprocess.run(ffmpeg_command)
 
 def create_folder_structure(folders):
     for folder in folders:
-        if not os.path.exists(folder):
-            os.makedirs(folder)
+        if not folder.exists():
+            folder.mkdir()
             print('Created folder:', folder)
 
-def setup_structure(save_path, source_path):
-    frames_path = os.path.join(save_path, CAMERA_FRAMES_DIR)
-    all_frames_path = os.path.join(save_path, INPUTS_DIR)
-    results_path = os.path.join(save_path, RESULTS_DIR)
-    cameras_path = os.path.join(save_path, SEPERATED_CAMERAS_DIR)
+def setup_structure(save_path, source_path, num_frames):
 
-    all_folders = [frames_path, all_frames_path, results_path, cameras_path]
+    frames_path = save_path / CAMERA_FRAMES_DIR
+    inputs_path = save_path / INPUTS_DIR
+    results_path = save_path / RESULTS_DIR
+    cameras_path = save_path / SEPERATED_CAMERAS_DIR
+    video_path = save_path / ORIGINAL_VIDEOS_DIR
+
+    all_folders = [frames_path, inputs_path, results_path, cameras_path, video_path]
     create_folder_structure(all_folders)
 
     # copy video folder
-    video_path = os.path.join(save_path, ORIGINAL_VIDEOS_DIR)
-    video_num = len(os.listdir(source_path))
-    shutil.copytree(source_path, video_path)
-    print(f"Copying {video_num} videos from {source_path} to {video_path}")
+    for source_video in source_path.iterdir():
+        cam = cv2.VideoCapture(source_video.as_posix())
+        fps = cam.get(cv2.CAP_PROP_FPS)
+        w, h = cam.get(cv2.CAP_PROP_FRAME_WIDTH), cam.get(cv2.CAP_PROP_FRAME_HEIGHT)
+
+        temp_video_path = video_path / "temp.mp4"
+        tw, th = w // 2, h // 2   # resizing necessary for too high quality videos, otherwise CUDA OOM
+        target_video_path = video_path / source_video.name
+        target_num_frames =  (num_frames - 1) / fps
+        ffmpeg_extract_subclip(source_video, 0, target_num_frames, targetname=temp_video_path)
+        ffmpeg_resize(temp_video_path, target_video_path, (tw, th))
+
+        temp_video_path.unlink()
+
+        # shutil.copy(source_path, video_path)
+
+    print(f"Copying videos from {source_path} to {video_path}")
 
     # extract frames
-    for video in os.listdir(video_path):
-        video_name, video_ext = os.path.splitext(video)
-        new_path = os.path.join(frames_path, video_name)
-        os.makedirs(new_path)
-        extract_frames(os.path.join(video_path, video), new_path)
+    for video in video_path.iterdir():
+        new_path = frames_path / video.stem
+        new_path.mkdir()
+        extract_frames(video, new_path)
 
+    frame_folders = sorted(frames_path.iterdir())
+    frame_files = [sorted(files.iterdir()) for files in frame_folders]
 
-    frame_folders = sorted(os.listdir(frames_path))
-    folder_paths = [os.path.join(frames_path, folder) for folder in frame_folders]
-    folder_files = [sorted(os.listdir(folder)) for folder in folder_paths]
+    num_frames = len(frame_files[0])
+    num_folders = len(frame_files)
 
-    num_frames = len(folder_files[0])
-    num_folders = len(folder_files)
+    for frame_idx in range(num_frames):
+        new_input_folder = inputs_path / str(frame_idx)
+        new_input_folder.mkdir()
 
-    for frame_counter in range(num_frames):
-        frame_counter_folder = os.path.join(all_frames_path, str(frame_counter))
-        os.mkdir(frame_counter_folder)
+        for folder_idx in range(num_folders):
+            src = frame_folders[folder_idx] / frame_files[folder_idx][frame_idx]
+            dst = new_input_folder / f"{folder_idx}.png"
+            shutil.copyfile(src, dst)
 
-        for i in range(num_folders):
-            src_path = os.path.join(folder_paths[i], folder_files[i][frame_counter])
-            dest_path = os.path.join(frame_counter_folder, f"{i}.png")
-            shutil.copyfile(src_path, dest_path)
-
-    guidance_image = folder_files[0][0]
-    guidance_path = os.path.join(folder_paths[0], guidance_image)
-    guidance_folder = os.path.join(save_path, GUIDANCE_DIR)
-    os.mkdir(guidance_folder)
-    shutil.copyfile(guidance_path, os.path.join(save_path, GUIDANCE_DIR, GUIDANCE_IMAGE))
-
-    return save_path
 
 
 def create_video(input_folder):
@@ -220,11 +224,22 @@ def visualize_masks_horizontal(masks, path, cmap=None):
     plt.savefig(path)
     plt.close(fig)
 
+def center_crop(img: Image.Image, target_height: int, target_width: int) -> Image.Image:
+
+    width, height = img.size  # PIL gives (w, h)
+
+    left = (width - target_width) // 2
+    top = (height - target_height) // 2
+    right = left + target_width
+    bottom = top + target_height
+
+    return img.crop((left, top, right, bottom))
+
+
 def load_easi3r_masks(input_paths, current_imgs, output_dir=None):
 
     # creates masks of shape (1, 1, H /2, W/2) # same dim as point cloud created by dust3r
-    if not isinstance(input_paths, list):
-        input_paths = [input_paths]
+    if not isinstance(current_imgs, list):
         current_imgs = [current_imgs]
 
     assert len(input_paths) == len(current_imgs)
@@ -233,8 +248,10 @@ def load_easi3r_masks(input_paths, current_imgs, output_dir=None):
     for i in range(len(input_paths)):
 
         easier_mask = Image.open(input_paths[i]).convert("L")
+        cropped_mask = center_crop(easier_mask, 288, 512)  # crop to 576×576
+
         to_tensor = transforms.ToTensor()  # Converts to float tensor in range [0, 1]
-        mask_tensor = to_tensor(easier_mask)
+        mask_tensor = to_tensor(cropped_mask)
         # mask_tensor = 1.0 - mask_tensor # invert to fit with ddim sampling blending
         mask_tensor = mask_tensor.unsqueeze(0)
         print(mask_tensor.shape)

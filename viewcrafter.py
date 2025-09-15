@@ -1,3 +1,4 @@
+import shutil
 import sys
 
 sys.path.append('./extern/dust3r')
@@ -65,23 +66,15 @@ class ViewCrafter:
             self.first_latent = None
             self.first_latents = None
             self.run_number = 0
-            self.mask_type = MaskType.COMP_WITH_PREV
+            self.mask_type = MaskType.EASI3R_PREV
             self.ddim_sampler = None
 
             assert os.path.isdir(self.opts.image_dir)
-            self.outer_folder = setup_structure(self.opts.save_dir, self.opts.image_dir)
+
+            self.base_dir = Path(self.opts.save_dir)
+            setup_structure(self.base_dir, Path(self.opts.image_dir), self.opts.n_frames)
 
             self.run_easi3r()
-
-            if self.opts.mode == 'single_video_interp': # todo for multi / easi3r in viewcrafter ausführen
-                # load pickle
-                with open(self.opts.pickle_path, 'rb') as f:
-                    self.pickle_im_poses = pickle.load(f)
-                    self.pickle_principal_points = pickle.load(f)
-                    self.pickle_focals = pickle.load(f)
-                    self.pickle_pts3d = pickle.load(f)
-                    self.pickle_depths = pickle.load(f)
-                    self.pickle_imgs = pickle.load(f)
 
             return
 
@@ -125,52 +118,64 @@ class ViewCrafter:
 
     def run_easi3r(self):
 
-        easi3r_masks_dir = os.path.join(self.opts.save_dir, EASI3R_MASKS_DIR)
-        input_masks_dir = os.path.join(self.opts.save_dir, EASI3R_MASKS_INPUT_DIR)
-        os.mkdir(easi3r_masks_dir)
+        save_dir = Path(self.opts.save_dir)
+        original_videos_dir = save_dir / ORIGINAL_VIDEOS_DIR
+
+        easi3r_results_dir = save_dir / EASI3R_RESULTS_DIR
+        input_masks_dir = save_dir / EASI3R_MASKS_INPUT_DIR
+        pickle_path = save_dir / PICKLES_DIR
+
+        os.mkdir(easi3r_results_dir)
         os.mkdir(input_masks_dir)
+        os.mkdir(pickle_path)
 
         env = os.environ.copy()
         env["CUDA_VISIBLE_DEVICES"] = "0"
         env["OPENBLAS_NUM_THREADS"] = "1"
 
-        for video in os.listdir(os.path.join(self.opts.save_dir, ORIGINAL_VIDEOS_DIR)):
-            name, ext = os.path.splitext(video)
+        for video in original_videos_dir.iterdir():
+            name = video.stem
 
-            video_path = os.path.join(self.opts.save_dir, ORIGINAL_VIDEOS_DIR, video)
-
-            cmd = (f"conda run -n easi3r python -u {self.opts.easi3r_path}/demo.py "
+            cmd = (f"conda run -n easi3r --no-capture-output python -u {self.opts.easi3r_path}/demo.py "
                    f"--weights {self.opts.easi3r_path}/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth "
                    f"--seq_name {name} "
-                   f"--input {video_path} "
-                   f"--output_dir {easi3r_masks_dir} "
+                   f"--input {video} "
+                   f"--output_dir {easi3r_results_dir} "
                    f"--sam2_mask_refine "
                    f"--num_frames {self.opts.n_frames} ")
+
+            # add --silent for non-verbose
 
             print(">> Running Easi3r")
 
             proc = subprocess.Popen(cmd, env=env, shell=True, cwd=self.opts.easi3r_path)
             ret = proc.wait()
             if ret != 0:
-                raise RuntimeError(f"Easi3R failed with exit code {ret}")
+                print(f"Easi3R failed with exit code {ret}")
 
-        mask_folders = sorted(os.listdir(easi3r_masks_dir))
-        folder_paths = [os.path.join(easi3r_masks_dir, folder, "frames_dynamic_masks") for folder in mask_folders]
-        folder_files = [sorted(os.listdir(folder)) for folder in folder_paths]
+            pickle_src = easi3r_results_dir / name / "pickle.pkl"
+            os.mkdir(pickle_path / name)
+            pickle_dst = pickle_path / name / "pickle.pkl"
+            shutil.copyfile(pickle_src, pickle_dst)
 
-        num_frames = len(folder_files[0])
-        num_folders = len(folder_files)
+        easi3r_results = sorted(easi3r_results_dir.iterdir())
+        dyn_mask_folders = [folder / "frames_dynamic_masks" for folder in easi3r_results]
+        dyn_mask_files = [sorted(folder.iterdir()) for folder in dyn_mask_folders]
 
-        for frame_counter in range(num_frames):
-            combined_mask_folder = os.path.join(input_masks_dir, str(frame_counter))
-            os.mkdir(combined_mask_folder)
+        num_frames = len(dyn_mask_files[0])
+        num_folders = len(dyn_mask_files)
 
-            for i in range(num_folders):
-                src_path = os.path.join(folder_paths[i], folder_files[i][frame_counter])
-                dest_path = os.path.join(combined_mask_folder, f"{i}.png")
-                shutil.copyfile(src_path, dest_path)
+        for frame_idx in range(num_frames):
+            new_mask_folder = input_masks_dir / str(frame_idx)
+            new_mask_folder.mkdir()
+
+            for folder_idx in range(num_folders):
+                src = dyn_mask_folders[folder_idx] / dyn_mask_files[folder_idx][frame_idx]
+                dst = new_mask_folder / f"{folder_idx}.png"
+                shutil.copyfile(src, dst)
 
         print("done")
+
 
     def render_pcd(self, pts3d ,imgs, masks, views, renderer, device,nbv=False):
         
@@ -205,7 +210,6 @@ class ViewCrafter:
 
     
     def run_diffusion(self, renderings, masks=None):
-
 
         prompts = [self.opts.prompt]
         videos = (renderings * 2. - 1.).permute(3,0,1,2).unsqueeze(0).to(self.device)
@@ -245,11 +249,16 @@ class ViewCrafter:
             #                                        condition_index, guidance_image=self.guidance_image, latent=self.prev_latent, mask=complete_mask, ddim_sampler=self.ddim_sampler)
             #
             # Use same reference picture for all and first_latent blending
+            # batch_samples, current_x0, intermediates = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
+            #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
+            #                                        self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
+            #                                        None, guidance_image=self.guidance_image, latent=latent, latents=latents, mask=masks, ddim_sampler=self.ddim_sampler)
+#
+            # not same cross-attention
             batch_samples, current_x0, intermediates = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
                                                    self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
                                                    self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-                                                   None, guidance_image=self.guidance_image, latent=latent, latents=latents, mask=masks, ddim_sampler=self.ddim_sampler)
-
+                                                   condition_index, guidance_image=None, latent=latent, latents=latents, mask=masks, ddim_sampler=self.ddim_sampler)
 
             if self.run_number == 0:
                 self.first_latent = current_x0
@@ -297,8 +306,10 @@ class ViewCrafter:
         mask_save_path = os.path.join(self.opts.save_dir, MASKS_DIR)
 
         if self.mask_type in [MaskType.EASI3R_PREV, MaskType.EASI3R_FIRST]:
-            easi3r_mask_path = f"/media/emmahaidacher/Volume/GOOD_RESULTS/easi3r/test_espresso_short16f/dynamic_mask_{self.run_number}.png"  # todo
-            return load_easi3r_masks(easi3r_mask_path, current_image, mask_save_path)
+            mask_dir = os.path.join(self.base_dir, EASI3R_MASKS_INPUT_DIR, str(self.run_number))
+            mask_folders = sorted(os.listdir(mask_dir))
+            mask_folders_paths = [os.path.join(mask_dir, folder) for folder in mask_folders]
+            return load_easi3r_masks(mask_folders_paths, current_image, mask_save_path)
 
         if self.mask_type == MaskType.COMP_WITH_FIRST:
             return create_frame_diff_masks(self.first_image, current_image, output_dir=mask_save_path)
@@ -393,15 +404,26 @@ class ViewCrafter:
     def nvs_single_view_v2v(self, gradio=False):
         # 最后一个view为 0 pose
         # todo cleanup
-        shape = self.pickle_imgs[self.run_number].shape
+
+        with open(Path(self.base_dir) / PICKLES_DIR / "0" / "pickle.pkl", 'rb') as f:
+            pickle_im_poses = pickle.load(f)
+            pickle_principal_points = pickle.load(f)
+            pickle_focals = pickle.load(f)
+            pickle_pts3d = pickle.load(f)
+            pickle_depths = pickle.load(f)
+            pickle_imgs = pickle.load(f)
+
+
+        shape = pickle_imgs[self.run_number].shape
+        # shape = self.img_ori
         H, W = int(shape[0]), int(shape[1])
 
-        c2ws = self.pickle_im_poses[self.run_number].unsqueeze(0)
-        principal_points = self.pickle_principal_points[self.run_number].unsqueeze(0)
-        focals = self.pickle_focals[self.run_number].unsqueeze(0)
+        c2ws = pickle_im_poses[self.run_number].unsqueeze(0)
+        principal_points = pickle_principal_points[self.run_number].unsqueeze(0)
+        focals = pickle_focals[self.run_number].unsqueeze(0)
 
-        pcd = [self.pickle_pts3d[self.run_number], self.pickle_pts3d[self.run_number]]
-        depth = [self.pickle_depths[self.run_number], self.pickle_depths[self.run_number]]
+        pcd = [pickle_pts3d[self.run_number], pickle_pts3d[self.run_number]]
+        depth = [pickle_depths[self.run_number], pickle_depths[self.run_number]]
 
         depth_avg = depth[-1][H // 2, W // 2]  # 以图像中心处的depth(z)为球心旋转
         radius = depth_avg * self.opts.center_scale  # 缩放调整
@@ -410,7 +432,7 @@ class ViewCrafter:
         c2ws, pcd = world_point_to_obj(poses=c2ws, points=torch.stack(pcd), k=-1, r=radius,
                                        elevation=self.opts.elevation, device=self.device)
 
-        imgs = np.array([self.pickle_imgs[self.run_number], self.pickle_imgs[self.run_number]])
+        imgs = np.array([pickle_imgs[self.run_number], pickle_imgs[self.run_number]])
 
         masks = None
 

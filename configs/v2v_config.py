@@ -5,8 +5,11 @@ CAMERA_FRAMES_DIR = "camera_frames"     # for each original video, folder with a
 INPUTS_DIR = "inputs"                   # input for each viewcrafter iteration (1 frame from each video)
 RESULTS_DIR = "results"                 # output of each viewcrafter iteration (interpolation between frame of each video)
 ORIGINAL_VIDEOS_DIR = "original_videos" # copy of original videos
-EASI3R_MASKS_DIR = "easi3r_masks"
+
+EASI3R_RESULTS_DIR = "easi3r_results"   # results from easi3r run
 EASI3R_MASKS_INPUT_DIR = "input_easi3r_masks"
+
+PICKLES_DIR = "pickles"
 
 SEPERATED_CAMERAS_DIR = "cameras"       # newly generated videos of all positions interpolated between original video
 DIFFUSION_FRAMES = "diffusion_frames"   # in cameras, stitched together diffusion frames
