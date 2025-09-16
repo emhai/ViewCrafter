@@ -142,7 +142,8 @@ class ViewCrafter:
                    f"--input {video} "
                    f"--output_dir {easi3r_results_dir} "
                    f"--sam2_mask_refine "
-                   f"--num_frames {self.opts.n_frames} ")
+                   f"--num_frames {self.opts.n_frames} "
+                   f"--silent")
 
             # add --silent for non-verbose
 
@@ -283,7 +284,10 @@ class ViewCrafter:
 
         # masked_render_results are the masks + point maps from duster, rendered to the calculated camera trajectory
         masked_render_results, viewmask = self.run_render(point_cloud, images, binary_masks, height, width, trajectory, no_views)
-        masked_render_results = F.interpolate(masked_render_results.permute(0, 3, 1, 2), size=(self.opts.height, self.opts.width),
+        masked_render_results = masked_render_results.permute(0, 3, 1, 2)
+        #crop = CenterCrop((288, 512))
+        #render_results_cropped = crop(masked_render_results)
+        masked_render_results = F.interpolate(masked_render_results, size=(self.opts.height, self.opts.width),
                                        mode='bilinear',
                                        align_corners=False).permute(0, 2, 3, 1)
         save_video(masked_render_results, os.path.join(self.opts.save_dir, MASKS_DIR, 'masked_render.mp4'),
@@ -312,10 +316,10 @@ class ViewCrafter:
             return load_easi3r_masks(mask_folders_paths, current_image, mask_save_path)
 
         if self.mask_type == MaskType.COMP_WITH_FIRST:
-            return create_frame_diff_masks(self.first_image, current_image, output_dir=mask_save_path)
+            return create_frame_diff_masks(self.first_image, current_image, output_dir=mask_save_path, threshold=0.01)
 
         if self.mask_type == MaskType.COMP_WITH_PREV:
-            return create_frame_diff_masks(self.prev_image, current_image, output_dir=mask_save_path)
+            return create_frame_diff_masks(self.prev_image, current_image, output_dir=mask_save_path, threshold=0.01)
 
         return None
 
@@ -404,26 +408,50 @@ class ViewCrafter:
     def nvs_single_view_v2v(self, gradio=False):
         # 最后一个view为 0 pose
         # todo cleanup
+        t_shape = self.images[0]['true_shape']
+        t_H, t_W = int(t_shape[0][0]), int(t_shape[0][1])
 
         with open(Path(self.base_dir) / PICKLES_DIR / "0" / "pickle.pkl", 'rb') as f:
             pickle_im_poses = pickle.load(f)
+            pickle_im_poses = pickle_im_poses[self.run_number].unsqueeze(0)
+
             pickle_principal_points = pickle.load(f)
+            pickle_principal_points = pickle_principal_points[self.run_number].unsqueeze(0)
+            pickle_principal_points = torch.tensor([[256., 128.]], dtype=torch.float32, device=self.device) # todo, always right?
+
             pickle_focals = pickle.load(f)
+            pickle_focals = pickle_focals[self.run_number].unsqueeze(0)
+
+            crop = CenterCrop((t_H, t_W))
+
             pickle_pts3d = pickle.load(f)
+            pickle_pts3d = pickle_pts3d[self.run_number] # H, W, C
+            pickle_pts3d = pickle_pts3d.permute(2, 0, 1) # C, H, W
+            pickle_pts3d = crop(pickle_pts3d)
+            pickle_pts3d = pickle_pts3d.permute(1, 2, 0) # H, W, C
+
             pickle_depths = pickle.load(f)
+            pickle_depths = pickle_depths[self.run_number]
+            pickle_depths = crop(pickle_depths)
+
             pickle_imgs = pickle.load(f)
+            pickle_imgs = pickle_imgs[self.run_number]
+            pickle_imgs_tensor = torch.from_numpy(pickle_imgs)
+            pickle_imgs_tensor = pickle_imgs_tensor.permute(2, 0, 1)
+            pickle_imgs_tensor = crop(pickle_imgs_tensor)
+            pickle_imgs_tensor = pickle_imgs_tensor.permute(1, 2, 0)
+            pickle_imgs = pickle_imgs_tensor.numpy()
 
 
-        shape = pickle_imgs[self.run_number].shape
-        # shape = self.img_ori
+        shape = pickle_imgs.shape
         H, W = int(shape[0]), int(shape[1])
 
-        c2ws = pickle_im_poses[self.run_number].unsqueeze(0)
-        principal_points = pickle_principal_points[self.run_number].unsqueeze(0)
-        focals = pickle_focals[self.run_number].unsqueeze(0)
+        c2ws = pickle_im_poses
+        principal_points = pickle_principal_points
+        focals = pickle_focals
 
-        pcd = [pickle_pts3d[self.run_number], pickle_pts3d[self.run_number]]
-        depth = [pickle_depths[self.run_number], pickle_depths[self.run_number]]
+        pcd = [pickle_pts3d, pickle_pts3d] # emulate result from original VC-run
+        depth = [pickle_depths, pickle_depths]
 
         depth_avg = depth[-1][H // 2, W // 2]  # 以图像中心处的depth(z)为球心旋转
         radius = depth_avg * self.opts.center_scale  # 缩放调整
@@ -432,7 +460,7 @@ class ViewCrafter:
         c2ws, pcd = world_point_to_obj(poses=c2ws, points=torch.stack(pcd), k=-1, r=radius,
                                        elevation=self.opts.elevation, device=self.device)
 
-        imgs = np.array([pickle_imgs[self.run_number], pickle_imgs[self.run_number]])
+        imgs = np.array([pickle_imgs, pickle_imgs])
 
         masks = None
 
@@ -793,6 +821,7 @@ class ViewCrafter:
 
             if mode == "single":
                 self.images, self.img_ori = self.load_initial_images(image_dir=self.opts.image_dir)
+                self.run_dust3r(input_images=self.images)
             else: # mode == "multi"
                 self.images, self.img_ori = self.load_initial_dir(image_dir=self.opts.image_dir)
                 self.run_dust3r(input_images=self.images, clean_pc=True) # if single, pc is from easi3r

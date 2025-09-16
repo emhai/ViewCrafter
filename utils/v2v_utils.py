@@ -86,14 +86,13 @@ def setup_structure(save_path, source_path, num_frames):
         fps = cam.get(cv2.CAP_PROP_FPS)
         w, h = cam.get(cv2.CAP_PROP_FRAME_WIDTH), cam.get(cv2.CAP_PROP_FRAME_HEIGHT)
 
-        temp_video_path = video_path / "temp.mp4"
-        tw, th = w // 2, h // 2   # resizing necessary for too high quality videos, otherwise CUDA OOM
+        # temp_video_path = video_path / "temp.mp4"
+        # tw, th = w // 2, h // 2   # resizing necessary for too high quality videos, otherwise CUDA OOM
         target_video_path = video_path / source_video.name
         target_num_frames =  (num_frames - 1) / fps
-        ffmpeg_extract_subclip(source_video, 0, target_num_frames, targetname=temp_video_path)
-        ffmpeg_resize(temp_video_path, target_video_path, (tw, th))
-
-        temp_video_path.unlink()
+        ffmpeg_extract_subclip(source_video, 0, target_num_frames, targetname=target_video_path)
+        # ffmpeg_resize(temp_video_path, target_video_path, (tw, th))
+        # temp_video_path.unlink()
 
         # shutil.copy(source_path, video_path)
 
@@ -248,7 +247,7 @@ def load_easi3r_masks(input_paths, current_imgs, output_dir=None):
     for i in range(len(input_paths)):
 
         easier_mask = Image.open(input_paths[i]).convert("L")
-        cropped_mask = center_crop(easier_mask, 288, 512)  # crop to 576×576
+        cropped_mask = center_crop(easier_mask, 256, 512)  # crop to 576×576
 
         to_tensor = transforms.ToTensor()  # Converts to float tensor in range [0, 1]
         mask_tensor = to_tensor(cropped_mask)
