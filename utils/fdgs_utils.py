@@ -4,12 +4,14 @@ from pathlib import Path
 import subprocess
 import shlex
 
-FOLDER_TO_4DGS = Path("/home/emmahaidacher/Desktop/4DGaussians")
+from PIL import Image
+
+PATH_TO_4DGS = Path("/home/emmahaidacher/Desktop/4DGaussians")
 
 
 def run_command(cmd):
     cmd = shlex.split(cmd)
-    proc = subprocess.run(cmd, capture_output=True, text=True, cwd=FOLDER_TO_4DGS)
+    proc = subprocess.run(cmd, capture_output=True, text=True, cwd=PATH_TO_4DGS)
 
     print(">> returncode:", proc.returncode)
     if proc.stdout:
@@ -34,7 +36,7 @@ def run_4dgs(exp_name):
     # │     		  ├── ...
     # │   	  | ...
 
-    assert (FOLDER_TO_4DGS / "data" / "multipleview" / exp_name).exists()
+    assert (PATH_TO_4DGS / "data" / "multipleview" / exp_name).exists()
 
     print(">> 4DGS START")
 
@@ -63,32 +65,43 @@ def run_4dgs(exp_name):
 
 def setup_4dgs_from_viewcrafter(cameras_path, exp_name):
 
-    output_folder = FOLDER_TO_4DGS / "data" / "multipleview" / exp_name
+    output_folder = PATH_TO_4DGS / "data" / "multipleview" / exp_name
     output_folder.mkdir()
 
     for folder in cameras_path.iterdir():
         if folder.is_dir():
-            shutil.copytree(str(folder), str(output_folder))
+            shutil.copytree(str(folder), str(output_folder / folder.name))
 
     
 def setup_4dgs_from_videos(video_folder, exp_name):
 
-    output_folder = FOLDER_TO_4DGS / "data" / "multipleview" / exp_name
+    output_folder = PATH_TO_4DGS / "data" / "multipleview" / exp_name
     output_folder.mkdir()
 
-    for i, video in enumerate(sorted(Path(video_folder).iterdir()), start=1):
+    for i, video in enumerate(sorted(video_folder.iterdir()), start=1):
 
         target_path = output_folder / f"cam{i:02}"
         print(f"Extracting frames from {video}")
         target_path.mkdir()
 
-        cmd = f'ffmpeg -i {str(video)} {str(target_path)}/frame_%05d.jpg'
+        cmd = f'ffmpeg -start_number 1 -i {str(video)} {str(target_path)}/frame_%05d.jpg'
         run_command(cmd)
 
+def from_png_to_jpg(folder):
+
+    folder = Path(folder)
+    for p in folder.rglob("*.png"):
+        img = Image.open(p).convert("RGB")
+        out_path = p.with_suffix(".jpg")
+        img.save(out_path, "JPEG")
+        p.unlink()
 
 def main():
-    path = "/media/emmahaidacher/Volume/TESTS/test/"
+    path = Path("/home/emmahaidacher/Desktop/4DGaussians/data/multipleview/test/")
     # setup_4dgs_from_videos(path, "test")
+
+    # setup_4dgs_from_viewcrafter(path, "test")
+    from_png_to_jpg(path)
     run_4dgs("test")
 
 if __name__ == '__main__':

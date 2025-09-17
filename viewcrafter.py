@@ -28,9 +28,12 @@ from torchvision.utils import save_image
 import torch.nn.functional as F
 import torchvision.transforms as transforms
 from PIL import Image
+
 from utils.pvd_utils import *
 from utils.v2v_utils import *
-from utils.gaussplat_utils import *
+from utils.fdgs_utils import *
+from utils.easi3r_utils import *
+
 from lvdm.models.samplers.ddim import DDIMSampler
 from lvdm.models.samplers.ddim_multiplecond import DDIMSampler as DDIMSampler_multicond
 from omegaconf import OmegaConf
@@ -75,7 +78,7 @@ class ViewCrafter:
             self.base_dir = Path(self.opts.save_dir)
             setup_structure(self.base_dir, Path(self.opts.image_dir), self.opts.n_frames)
 
-            self.run_easi3r()
+            run_easi3r(self.base_dir, self.opts.n_frames)
 
             return
 
@@ -116,67 +119,6 @@ class ViewCrafter:
             self.scene = scene.clean_pointcloud()
         else:
             self.scene = scene
-
-    def run_easi3r(self):
-
-        save_dir = Path(self.opts.save_dir)
-        original_videos_dir = save_dir / ORIGINAL_VIDEOS_DIR
-
-        easi3r_results_dir = save_dir / EASI3R_RESULTS_DIR
-        input_masks_dir = save_dir / EASI3R_MASKS_INPUT_DIR
-        pickle_path = save_dir / PICKLES_DIR
-
-        os.mkdir(easi3r_results_dir)
-        os.mkdir(input_masks_dir)
-        os.mkdir(pickle_path)
-
-        env = os.environ.copy()
-        env["CUDA_VISIBLE_DEVICES"] = "0"
-        env["OPENBLAS_NUM_THREADS"] = "1"
-
-        for video in original_videos_dir.iterdir():
-            name = video.stem
-
-            cmd = (f"conda run -n easi3r --no-capture-output python -u {self.opts.easi3r_path}/demo.py "
-                   f"--weights {self.opts.easi3r_path}/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth "
-                   f"--seq_name {name} "
-                   f"--input {video} "
-                   f"--output_dir {easi3r_results_dir} "
-                   f"--sam2_mask_refine "
-                   f"--num_frames {self.opts.n_frames} "
-                   f"--silent")
-
-            # add --silent for non-verbose
-
-            print(">> Running Easi3r")
-
-            proc = subprocess.Popen(cmd, env=env, shell=True, cwd=self.opts.easi3r_path)
-            ret = proc.wait()
-            if ret != 0:
-                print(f"Easi3R failed with exit code {ret}")
-
-            pickle_src = easi3r_results_dir / name / "pickle.pkl"
-            os.mkdir(pickle_path / name)
-            pickle_dst = pickle_path / name / "pickle.pkl"
-            shutil.copyfile(pickle_src, pickle_dst)
-
-        easi3r_results = sorted(easi3r_results_dir.iterdir())
-        dyn_mask_folders = [folder / "frames_dynamic_masks" for folder in easi3r_results]
-        dyn_mask_files = [sorted(folder.iterdir()) for folder in dyn_mask_folders]
-
-        num_frames = len(dyn_mask_files[0])
-        num_folders = len(dyn_mask_files)
-
-        for frame_idx in range(num_frames):
-            new_mask_folder = input_masks_dir / str(frame_idx)
-            new_mask_folder.mkdir()
-
-            for folder_idx in range(num_folders):
-                src = dyn_mask_folders[folder_idx] / dyn_mask_files[folder_idx][frame_idx]
-                dst = new_mask_folder / f"{folder_idx}.png"
-                shutil.copyfile(src, dst)
-
-        print("done")
 
 
     def render_pcd(self, pts3d ,imgs, masks, views, renderer, device,nbv=False):
@@ -275,6 +217,7 @@ class ViewCrafter:
         return torch.clamp(batch_samples[0][0].permute(1,2,3,0), -1., 1.) 
 
     def complete_mask_creation(self, point_cloud, images, height, width, trajectory, no_views):
+
         if self.run_number == 0:
             return None
 
@@ -282,39 +225,34 @@ class ViewCrafter:
         # frame, loaded dynamic mask from easi3r - depends on self.mask_type. masks of shape (1, 1, H /2, W/2) which
         # is the same dim as point cloud created by dust3r
         binary_masks = self.create_binary_masks()
-
+        mask_save_dir = Path(self.opts.save_dir) / MASKS_DIR
         # masked_render_results are the masks + point maps from duster, rendered to the calculated camera trajectory
         masked_render_results, viewmask = self.run_render(point_cloud, images, binary_masks, height, width, trajectory, no_views)
-        masked_render_results = masked_render_results.permute(0, 3, 1, 2)
-        #crop = CenterCrop((288, 512))
-        #render_results_cropped = crop(masked_render_results)
-        masked_render_results = F.interpolate(masked_render_results, size=(self.opts.height, self.opts.width),
+        masked_render_results = F.interpolate(masked_render_results.permute(0, 3, 1, 2), size=(self.opts.height, self.opts.width),
                                        mode='bilinear',
                                        align_corners=False).permute(0, 2, 3, 1)
-        save_video(masked_render_results, os.path.join(self.opts.save_dir, MASKS_DIR, 'masked_render.mp4'),
-                   os.path.join(self.opts.save_dir, MASKS_DIR, "masked_render_results"))
-        visualize_masks_horizontal(masked_render_results, os.path.join(self.opts.save_dir, MASKS_DIR, "diff_masks_all.png"))
+        save_video(masked_render_results, str(mask_save_dir / 'masked_render.mp4'), str(mask_save_dir / "masked_render_results"))
+        visualize_masks_horizontal(masked_render_results, mask_save_dir / "diff_masks_all.png")
 
         # boolean_masks are the masked_render_results, thresholded to [0, 1]
         boolean_masks = self.rendered_mask_to_binary(masked_render_results)
-        visualize_masks_horizontal(boolean_masks, os.path.join(self.opts.save_dir, MASKS_DIR, "bool_masks_all.png"), cmap='grey')
+        visualize_masks_horizontal(boolean_masks, mask_save_dir / "bool_masks_all.png", cmap='grey')
 
         # latent_masks are the boolean_masks downsampled to latent shape
         latent_masks = self.binary_mask_to_latent(boolean_masks)
-        visualize_masks_horizontal(latent_masks.squeeze(), os.path.join(self.opts.save_dir, MASKS_DIR, "latent_masks_all.png"), cmap='grey')
+        visualize_masks_horizontal(latent_masks.squeeze(), mask_save_dir / "latent_masks_all.png", cmap='grey')
 
         return latent_masks
 
     def create_binary_masks(self, easi3r_path=None):
 
         current_image = self.img_ori
-        mask_save_path = os.path.join(self.opts.save_dir, MASKS_DIR)
+        mask_save_path = Path(self.opts.save_dir) / MASKS_DIR
 
         if self.mask_type in [MaskType.EASI3R_PREV, MaskType.EASI3R_FIRST]:
-            mask_dir = os.path.join(self.base_dir, EASI3R_MASKS_INPUT_DIR, str(self.run_number))
-            mask_folders = sorted(os.listdir(mask_dir))
-            mask_folders_paths = [os.path.join(mask_dir, folder) for folder in mask_folders]
-            return load_easi3r_masks(mask_folders_paths, current_image, mask_save_path)
+            mask_dir = self.base_dir / EASI3R_MASKS_INPUT_DIR / str(self.run_number)
+            mask_folders = sorted(mask_dir.iterdir())
+            return load_easi3r_masks(mask_folders, current_image, mask_save_path)
 
         if self.mask_type == MaskType.COMP_WITH_FIRST:
             return create_frame_diff_masks(self.first_image, current_image, output_dir=mask_save_path, threshold=0.01)
@@ -412,13 +350,15 @@ class ViewCrafter:
         t_shape = self.images[0]['true_shape']
         t_H, t_W = int(t_shape[0][0]), int(t_shape[0][1])
 
-        with open(Path(self.base_dir) / PICKLES_DIR / "0" / "pickle.pkl", 'rb') as f:
+        # pickle_dir = Path(self.base_dir) / PICKLES_DIR # todo figure out
+        # pickle_file = next(pickle_dir.iterdir()).glob("*")
+        with open(Path(self.base_dir) / PICKLES_DIR / "4" / "pickle.pkl", 'rb') as f:
             pickle_im_poses = pickle.load(f)
             pickle_im_poses = pickle_im_poses[self.run_number].unsqueeze(0)
 
             pickle_principal_points = pickle.load(f)
-            pickle_principal_points = pickle_principal_points[self.run_number].unsqueeze(0)
-            pickle_principal_points = torch.tensor([[256., 128.]], dtype=torch.float32, device=self.device) # todo, always right?
+            pickle_principal_points = pickle_principal_points[self.run_number].unsqueeze(0) # wrong pp from easi3r since resolution is different
+            pickle_principal_points = torch.tensor([[t_W // 2., t_H // 2.]], dtype=torch.float32, device=self.device) # todo, always right?
 
             pickle_focals = pickle.load(f)
             pickle_focals = pickle_focals[self.run_number].unsqueeze(0)
@@ -795,34 +735,36 @@ class ViewCrafter:
         return all_results
 
     def run_video_interp(self, mode):
-        original_save_dir = self.opts.save_dir
-        input_dir = os.path.join(original_save_dir, INPUTS_DIR)  # all inputs
-        results_dir = os.path.join(original_save_dir, RESULTS_DIR)  # all results
-        all_frames = sorted(os.listdir(input_dir), key=lambda x: int(os.path.splitext(x)[0]))
+
+        input_dir = self.base_dir / INPUTS_DIR  # all inputs
+        results_dir = self.base_dir /RESULTS_DIR  # all results
+        cameras_dir = self.base_dir / SEPERATED_CAMERAS_DIR # all cameras (result in the end)
+
+        all_frames = [x.name for x in sorted(input_dir.iterdir(), key=lambda x: int(x.stem))]
         all_frames = all_frames[:self.opts.n_frames] # todo assert that n_frames < input_vid_frames
 
         if mode == "single":
-            self.opts.mode = 'single_view_txt'  # necessary for inner functions - txt needs to be provided todo also different kinds possible
+            self.opts.mode = 'single_view_txt'  # necessary for inner functions - txt needs to be provided todo also different kinds possible, maybe with self.opts.mode.contains()
 
         print(all_frames)
         for frame in all_frames:
             print("running frame", int(frame) + 1, "/", len(all_frames), "run_no: ", self.run_number)
             start = time.time()
 
-            current_input_dir = os.path.join(input_dir, frame)
-            current_result_dir = os.path.join(results_dir, frame)
+            current_input_dir = input_dir / frame
+            current_result_dir = results_dir / frame
 
             if mode == "single":
-                current_input_dir = os.path.join(current_input_dir, os.listdir(current_input_dir)[0])
+                current_input_dir, = current_input_dir.glob("*") # only one file in directory, choose that
 
-            self.opts.image_dir = current_input_dir
-            self.opts.save_dir = current_result_dir
+            self.opts.image_dir = str(current_input_dir)
+            self.opts.save_dir = str(current_result_dir)
 
             os.mkdir(self.opts.save_dir)
 
             if mode == "single":
                 self.images, self.img_ori = self.load_initial_images(image_dir=self.opts.image_dir)
-                self.run_dust3r(input_images=self.images)
+                # self.run_dust3r(input_images=self.images)
             else: # mode == "multi"
                 self.images, self.img_ori = self.load_initial_dir(image_dir=self.opts.image_dir)
                 self.run_dust3r(input_images=self.images, clean_pc=True) # if single, pc is from easi3r
@@ -846,10 +788,11 @@ class ViewCrafter:
                                                                                              remaining_time / 60))
             self.run_number += 1
 
-        separate_cameras(results_dir, os.path.join(original_save_dir, SEPERATED_CAMERAS_DIR), DIFFUSION_FRAMES)
-        separate_cameras(results_dir, os.path.join(original_save_dir, SEPERATED_CAMERAS_DIR), RENDER_FRAMES)
+        separate_cameras(results_dir, cameras_dir, DIFFUSION_FRAMES)
+        separate_cameras(results_dir, cameras_dir, RENDER_FRAMES)
 
-        setup_4dgs_from_videos(os.path.join(original_save_dir, SEPERATED_CAMERAS_DIR), self.opts.exp_name)
+        setup_4dgs_from_viewcrafter(cameras_dir, self.opts.exp_name)
+        run_4dgs(self.opts.exp_name)
 
 
     def setup_diffusion(self):

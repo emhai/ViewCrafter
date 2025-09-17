@@ -7,7 +7,6 @@ import numpy as np
 import torch
 from PIL import Image
 import torch.nn.functional as F
-import torchvision.transforms as transforms
 from pathlib import Path
 from skimage import data, filters
 from torch.ao.nn.quantized.functional import threshold
@@ -18,46 +17,8 @@ from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip, ffmpeg_resize
 
 import matplotlib.pyplot as plt
 from utils.pvd_utils import save_pointcloud_with_normals, get_pc, center_crop_image
+from utils.visualization_utils import visualize_pixel_masks
 
-
-def save_masks(mask_list, save_dir, visualize=True, save=True):
-    save_dir = Path(save_dir)
-    save_dir.mkdir()
-
-    for i, msk in enumerate(mask_list):
-        if isinstance(msk, torch.Tensor):
-            msk_np = msk.cpu().detach().numpy()
-        else:
-            msk_np = msk
-
-        msk_img = (msk_np * 255).astype(np.uint8)
-
-        if save:
-            mask_img = Image.fromarray(msk_img)
-            mask_img.save(save_dir / f"mask_{i}.png")
-
-        if visualize:
-            plt.imshow(msk_np, cmap='gray')
-            plt.title(f"Mask {i}")
-            plt.show()
-
-def save_depth(depth_list, save_dir, visualize=True, save=True):
-    save_dir = Path(save_dir)
-    save_dir.mkdir()
-
-    for i, dpt in enumerate(depth_list):
-        dpt_np = dpt.cpu().detach().numpy()
-        dpt_norm = ((dpt_np - dpt_np.min()) / (dpt_np.ptp() + 1e-8) * 255).astype(np.uint8)
-
-        if save:
-            depth_img = Image.fromarray(dpt_norm)
-            depth_img.save(save_dir / f"depth_{i}.png")
-
-        if visualize:
-            plt.imshow(dpt_np, cmap='plasma')
-            plt.title(f"Depth Map {i}")
-            plt.colorbar()
-            plt.show()
 
 def extract_frames(video_path, frames_path):
     print(f"Extracting frames from {video_path}")
@@ -89,8 +50,9 @@ def setup_structure(save_path, source_path, num_frames):
         fps = cam.get(cv2.CAP_PROP_FPS)
         w, h = cam.get(cv2.CAP_PROP_FRAME_WIDTH), cam.get(cv2.CAP_PROP_FRAME_HEIGHT)
 
-        # temp_video_path = video_path / "temp.mp4"
+        temp_video_path = video_path / "temp.mp4"
         # tw, th = w // 2, h // 2   # resizing necessary for too high quality videos, otherwise CUDA OOM
+        # print(f"Resizing from {w}x{h} to {tw}x{th}")
         target_video_path = video_path / source_video.name
         target_num_frames =  (num_frames - 1) / fps
         ffmpeg_extract_subclip(source_video, 0, target_num_frames, targetname=target_video_path)
@@ -122,8 +84,6 @@ def setup_structure(save_path, source_path, num_frames):
             dst = new_input_folder / f"{folder_idx}.png"
             shutil.copyfile(src, dst)
 
-
-
 def create_video(input_folder):
 
     camera_name = input_folder.stem
@@ -150,7 +110,6 @@ def create_video(input_folder):
     video.release()
     cv2.destroyAllWindows()
 
-
 def separate_cameras(results_folder, all_cameras_folder, frame_type):
 
     for frame_number in results_folder.iterdir(): # 1 folder in results equal to 1 frame with n synthesized cameras
@@ -173,93 +132,6 @@ def separate_cameras(results_folder, all_cameras_folder, frame_type):
     print("Creating Videos")
     for all_frames_folder in (all_cameras_folder / frame_type).iterdir():
         create_video(all_frames_folder)
-
-
-def visualize_pixel_masks(full_res_mask, image, path, title):
-
-    if not os.path.isdir(os.path.dirname(path)):
-        os.makedirs(os.path.dirname(path))
-
-    fig, axs = plt.subplots(1, 3, figsize=(15, 5))
-
-    axs[0].imshow(image.numpy())
-    axs[0].set_title("Original image")
-    axs[0].axis("off")
-
-    axs[1].imshow(full_res_mask.squeeze().numpy(), cmap='gray')
-    axs[1].set_title(title)
-    axs[1].axis("off")
-
-    mask_resized = F.interpolate(full_res_mask, size=(image.shape[0], image.shape[1]), mode='nearest')  # shape: (1,1,768,1024)
-
-    # Step 2 — squeeze to H,W
-    mask_2d = mask_resized.squeeze() # shape: (768,1024)
-    axs[2].imshow(image.numpy())  # original image
-    axs[2].imshow(mask_2d, cmap='Reds', alpha=0.5)  # transparent red mask
-    axs[2].axis('off')
-
-    plt.tight_layout()
-    plt.savefig(path)
-    plt.close(fig)
-
-def visualize_masks_horizontal(masks, path, cmap=None):
-
-    if not os.path.isdir(os.path.dirname(path)):
-        os.makedirs(os.path.dirname(path))
-
-    if isinstance(masks, torch.Tensor):
-        masks = masks.detach().cpu().numpy()
-
-    n = masks.shape[0]
-    fig, axes = plt.subplots(1, n, figsize=(n * 5, 5))
-
-    for i in range(n):
-        axes[i].imshow(masks[i], cmap=cmap)
-        axes[i].axis("off")
-        axes[i].set_title(f"Mask {i}")
-
-    plt.tight_layout()
-    plt.savefig(path)
-    plt.close(fig)
-
-def center_crop(img: Image.Image, target_height: int, target_width: int) -> Image.Image:
-
-    width, height = img.size  # PIL gives (w, h)
-
-    left = (width - target_width) // 2
-    top = (height - target_height) // 2
-    right = left + target_width
-    bottom = top + target_height
-
-    return img.crop((left, top, right, bottom))
-
-
-def load_easi3r_masks(input_paths, current_imgs, output_dir=None):
-
-    # creates masks of shape (1, 1, H /2, W/2) # same dim as point cloud created by dust3r
-    if not isinstance(current_imgs, list):
-        current_imgs = [current_imgs]
-
-    assert len(input_paths) == len(current_imgs)
-
-    all_masks = []
-    for i in range(len(input_paths)):
-
-        easier_mask = Image.open(input_paths[i]).convert("L")
-        cropped_mask = center_crop(easier_mask, 256, 512)  # crop to 576×576
-
-        to_tensor = transforms.ToTensor()  # Converts to float tensor in range [0, 1]
-        mask_tensor = to_tensor(cropped_mask)
-        # mask_tensor = 1.0 - mask_tensor # invert to fit with ddim sampling blending
-        mask_tensor = mask_tensor.unsqueeze(0)
-        print(mask_tensor.shape)
-
-        if output_dir is not None:
-            visualize_pixel_masks(mask_tensor, current_imgs[i], os.path.join(output_dir, f"easi3r_mask_{i}.png"), "easi3r mask for this frame")
-
-        all_masks.append(mask_tensor.bool().squeeze())
-
-    return all_masks
 
 
 def create_frame_diff_masks(current_imgs, prev_imgs, threshold=0.1, output_dir=None):
@@ -296,102 +168,12 @@ def create_frame_diff_masks(current_imgs, prev_imgs, threshold=0.1, output_dir=N
         print(mask_pixel_space_half.shape)
 
         if output_dir is not None:
-            visualize_pixel_masks(mask_pixel_space_half, current_imgs[i], os.path.join(output_dir, f"pixel_diffs_{i}.png"), "difference between first frame and current")
+            visualize_pixel_masks(mask_pixel_space_half, current_imgs[i], output_dir /f"pixel_diffs_{i}.png", "difference between first frame and current")
 
         all_masks.append(mask_pixel_space_half.bool().squeeze())
 
     return all_masks
 
-def get_masked_pointcloud(masks, pcd, output_dir=None):
-
-    if output_dir is not None:
-        if not os.path.isdir(output_dir):
-            os.makedirs(output_dir)
-        # visualize_masks(all_masks, os.path.join(output_dir, "pixel_diffs.png"))
-
-    assert len(pcd) == len(masks)
-
-    masked_point_cloud = []
-    full_point_cloud = []
-    for i, mask in enumerate(masks):
-        mask_2d_half = mask.squeeze(0).squeeze(0).bool()
-        mask_2d_half = ~mask_2d_half
-        points = pcd[i].cpu()
-        masked_points = points[mask_2d_half]
-        masked_point_cloud.append(masked_points)
-        full_point_cloud.append(points)
-
-    masked_point_cloud = torch.cat(masked_point_cloud, dim=0)
-    full_point_cloud = torch.cat(full_point_cloud, dim=0)
-    print(f"size of masked_pc: {len(masked_point_cloud)}")
-
-    return masked_point_cloud
-
-def interpolate_masks(masks, pcd, traj, output_dir=None):
-
-    if output_dir is not None:
-        if not os.path.isdir(output_dir):
-            os.makedirs(output_dir)
-        # visualize_masks(all_masks, os.path.join(output_dir, "pixel_diffs.png"))
-
-    assert len(masks) == len(pcd)
-
-    # mask_2d_half = mask_2d_half.squeeze(0).squeeze(0).bool()
-    # mask_2d_half = ~mask_2d_half
-    # points = pcd[i].cpu()
-    # masked_points = points[mask_2d_half]
-    # mask_points_3d.append(masked_points)
-    #
-    # # Combine all static points from all image pairs
-    # combined_points = torch.cat(mask_points_3d, dim=0)
-    # print(f"  Total static points collected: {len(combined_points)}")
-    #
-    # vis_path_pcd = os.path.join(output_dir, "02_3d_point_clouds.png")
-    # # Assuming the first pcd is representative of the overall structure
-    # #visualize_point_cloud(pcd[0], combined_points, vis_path_pcd)
-    # print(f"  Saved point cloud visualization to {vis_path_pcd}")
-    #
-    # H, W = trajectory_cameras.image_size[0].tolist()
-    # device = trajectory_cameras.device
-    # num_cameras = len(trajectory_cameras)
-    # combined_points = combined_points.to(device)
-    #
-    # # Project the combined static points onto all camera screens at once
-    # projected_points_screen = trajectory_cameras.transform_points_screen(combined_points)
-    #
-    # new_masks = []
-    # print(f"\n--- Step 2: Re-projecting {len(combined_points)} static points onto {num_cameras} camera views ---")
-    # for i in range(num_cameras):
-    #     xy_coords = projected_points_screen[i, :, :2]
-    #     z_depth = projected_points_screen[i, :, 2]
-    #
-    #     # Filter for points visible in the camera frame
-    #     valid_mask = (z_depth > 0) & (xy_coords[:, 0] >= 0) & (xy_coords[:, 0] < W) & (xy_coords[:, 1] >= 0) & (
-    #                 xy_coords[:, 1] < H)
-    #     valid_coords = xy_coords[valid_mask].long()
-    #
-    #     # Create the full-resolution mask by "splatting" points
-    #     full_res_mask = torch.zeros((int(H), int(W)), device=device, dtype=torch.float32)
-    #     if valid_coords.shape[0] > 0:
-    #         full_res_mask[valid_coords[:, 1], valid_coords[:, 0]] = 1.0
-    #
-    #     # Prepare for downsampling
-    #     finished_mask_bchw = full_res_mask.unsqueeze(0).unsqueeze(0)
-    #
-    #     # Downsample using 'area' interpolation
-    #     mask_latent = F.interpolate(
-    #         finished_mask_bchw,
-    #         size=(h, w),
-    #         mode='area'
-    #     )
-    #
-    #     mask_latent = (mask_latent > 0.0).float()
-    #     mask_latent = 1 - mask_latent
-    #     new_masks.append(mask_latent.cpu())
-    #
-    #     vis_path_reproj = os.path.join(output_dir, f"03_reprojected_mask_cam_{i:02d}.png")
-    #     visualize_reprojection(full_res_mask, mask_latent, vis_path_reproj)
-    #     print(f"  Camera {i}: Re-projected {valid_coords.shape[0]} points. Visualization saved to {vis_path_reproj}")
 
 # https://learnopencv.com/simple-background-estimation-in-videos-using-opencv-c-python/
 def estimate_background(video):

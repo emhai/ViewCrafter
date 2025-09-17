@@ -52,9 +52,9 @@ def save_video(data,images_path, images_folder_path=None, folder=None):
         return
 
     os.makedirs(images_folder_path, exist_ok=True)
-    for idx, frame in enumerate(tensor_data):
+    for idx, frame in enumerate(tensor_data, start=1):
         img = Image.fromarray(frame.numpy())
-        img.save(os.path.join(images_folder_path, f"frame_{idx:04d}.png"))
+        img.save(os.path.join(images_folder_path, f"frame_{idx:04d}.jpg"))
 
 def get_input_dict(img_tensor,idx,dtype = torch.float32):
 
