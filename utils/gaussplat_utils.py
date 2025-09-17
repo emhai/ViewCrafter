@@ -19,6 +19,7 @@ def run_command(cmd):
 
 def run_4dgs(exp_name):
 
+    # From https://github.com/hustvl/4DGaussians
     # For multipleviews scenes: If you want to train your own dataset of multipleviews scenes, you can orginize your dataset as follows:
     # ├── data
     # |   | multipleview
@@ -35,25 +36,29 @@ def run_4dgs(exp_name):
 
     assert (FOLDER_TO_4DGS / "data" / "multipleview" / exp_name).exists()
 
-    print(">> Running 4DGS")
+    print(">> 4DGS START")
 
     # DATA PREPARATION
+    print(">> DATA PREPARATION")
     cmd = f'conda run -n Gaussians4D bash multipleviewprogress.sh {exp_name}'
     run_command(cmd)
 
     # TRAINING
+    print(">> TRAINING")
     cmd = f'conda run -n Gaussians4D python train.py -s  data/multipleview/{exp_name} --port 6017 --expname "multipleview/{exp_name}" --configs arguments/multipleview/default.py'
     run_command(cmd)
 
     # RENDERING
-    cmd = f'conda run -n Gaussians4D python render.py --model_path "output/multipleview{exp_name}"  --skip_train --configs arguments/multipleview/default.py'
+    print(">> RENDERING")
+    cmd = f'conda run -n Gaussians4D python render.py --model_path "output/multipleview/{exp_name}"  --skip_train --configs arguments/multipleview/default.py'
     run_command(cmd)
 
     # EVALUATION
-    cmd = f'conda run -n Gaussians4D python metrics.py --model_path "output/multipleview{exp_name}"'
+    print(">> EVALUATION")
+    cmd = f'conda run -n Gaussians4D python metrics.py --model_path "output/multipleview/{exp_name}"'
     run_command(cmd)
 
-    print(">> Done")
+    print(">> 4DGS END")
 
 
 def setup_4dgs_from_viewcrafter(cameras_path, exp_name):
@@ -68,8 +73,7 @@ def setup_4dgs_from_viewcrafter(cameras_path, exp_name):
     
 def setup_4dgs_from_videos(video_folder, exp_name):
 
-    folder_to_4dgs = Path("/home/emmahaidacher/Desktop/4DGaussians")
-    output_folder = folder_to_4dgs / "data" / "multipleview" / exp_name
+    output_folder = FOLDER_TO_4DGS / "data" / "multipleview" / exp_name
     output_folder.mkdir()
 
     for i, video in enumerate(sorted(Path(video_folder).iterdir()), start=1):
@@ -78,14 +82,14 @@ def setup_4dgs_from_videos(video_folder, exp_name):
         print(f"Extracting frames from {video}")
         target_path.mkdir()
 
-        ffmpeg_command = ['ffmpeg', '-i', str(video), f"{str(target_path)}/frame_%05d.jpg"]
-        proc = subprocess.Popen(ffmpeg_command)
+        cmd = f'ffmpeg -i {str(video)} {str(target_path)}/frame_%05d.jpg'
+        run_command(cmd)
 
 
 def main():
-    path = "/home/emmahaidacher/Desktop/4DGaussians/data/multipleview/espresso_3_cams"
+    path = "/media/emmahaidacher/Volume/TESTS/test/"
     # setup_4dgs_from_videos(path, "test")
-    run_4dgs("espresso_3_cams")
+    run_4dgs("test")
 
 if __name__ == '__main__':
     main()

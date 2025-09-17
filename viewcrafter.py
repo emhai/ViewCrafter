@@ -846,7 +846,9 @@ class ViewCrafter:
                                                                                              remaining_time / 60))
             self.run_number += 1
 
-        separate_cameras(results_dir, os.path.join(original_save_dir, SEPERATED_CAMERAS_DIR))
+        separate_cameras(results_dir, os.path.join(original_save_dir, SEPERATED_CAMERAS_DIR), DIFFUSION_FRAMES)
+        separate_cameras(results_dir, os.path.join(original_save_dir, SEPERATED_CAMERAS_DIR), RENDER_FRAMES)
+
         setup_4dgs_from_videos(os.path.join(original_save_dir, SEPERATED_CAMERAS_DIR), self.opts.exp_name)
 
 

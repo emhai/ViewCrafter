@@ -21,7 +21,9 @@ from utils.pvd_utils import save_pointcloud_with_normals, get_pc, center_crop_im
 
 
 def save_masks(mask_list, save_dir, visualize=True, save=True):
-    os.makedirs(save_dir)
+    save_dir = Path(save_dir)
+    save_dir.mkdir()
+
     for i, msk in enumerate(mask_list):
         if isinstance(msk, torch.Tensor):
             msk_np = msk.cpu().detach().numpy()
@@ -32,7 +34,7 @@ def save_masks(mask_list, save_dir, visualize=True, save=True):
 
         if save:
             mask_img = Image.fromarray(msk_img)
-            mask_img.save(os.path.join(save_dir, f"mask_{i}.png"))
+            mask_img.save(save_dir / f"mask_{i}.png")
 
         if visualize:
             plt.imshow(msk_np, cmap='gray')
@@ -40,7 +42,8 @@ def save_masks(mask_list, save_dir, visualize=True, save=True):
             plt.show()
 
 def save_depth(depth_list, save_dir, visualize=True, save=True):
-    os.makedirs(save_dir)
+    save_dir = Path(save_dir)
+    save_dir.mkdir()
 
     for i, dpt in enumerate(depth_list):
         dpt_np = dpt.cpu().detach().numpy()
@@ -48,7 +51,7 @@ def save_depth(depth_list, save_dir, visualize=True, save=True):
 
         if save:
             depth_img = Image.fromarray(dpt_norm)
-            depth_img.save(os.path.join(save_dir, f"depth_{i}.png"))
+            depth_img.save(save_dir / f"depth_{i}.png")
 
         if visualize:
             plt.imshow(dpt_np, cmap='plasma')
@@ -123,22 +126,23 @@ def setup_structure(save_path, source_path, num_frames):
 
 def create_video(input_folder):
 
-    name = os.path.basename(input_folder)
-    outer_folder = os.path.dirname(input_folder)
-    video_name = f"{name}.mp4"
-    video_path = os.path.join(outer_folder, video_name)
+    camera_name = input_folder.stem
+    camera_dir = input_folder.parent
+    video_name = f"{camera_name}.mp4"
+    video_path = str(camera_dir / video_name)
 
-    images = sorted(os.listdir(input_folder), key=lambda x: int(os.path.splitext(x)[0]))
-    frame = cv2.imread(os.path.join(input_folder, images[0]))
+    images = sorted(input_folder.iterdir(), key=lambda x: int(x.stem.split("_")[-1]))
+
+    frame = cv2.imread(str(input_folder / images[0]))
     height, width, layers = frame.shape
 
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # You can also try 'avc1'
-    fps = 30  # Adjust frame rate as needed
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    fps = 30
     video = cv2.VideoWriter(video_path, fourcc, fps, (width, height))
 
     # Write images to video
     for image in images:
-        img_path = os.path.join(input_folder, image)
+        img_path = str(input_folder / image)
         frame = cv2.imread(img_path)
         video.write(frame)
 
@@ -147,34 +151,28 @@ def create_video(input_folder):
     cv2.destroyAllWindows()
 
 
-def separate_cameras(results_folder, cameras_folder):
-    frame_types = [DIFFUSION_FRAMES, RENDER_FRAMES]
+def separate_cameras(results_folder, all_cameras_folder, frame_type):
 
-    for frame_number in os.listdir(results_folder):
-        if not os.path.isdir(os.path.join(results_folder, frame_number)):
+    for frame_number in results_folder.iterdir(): # 1 folder in results equal to 1 frame with n synthesized cameras
+        if not frame_number.is_dir():
             continue
 
+        frame_folder = frame_number / frame_type # diffusion_frames or render_frames
+        for camera in frame_folder.iterdir(): # n synthesized cameras
+            name = int(camera.stem.split("_")[1]) + 1 # cams start at 01
 
-        for frame_type in frame_types:
-            frame_folder = os.path.join(results_folder, frame_number, frame_type)
-            for camera in os.listdir(frame_folder):
-                file_name = os.path.join(frame_folder, camera)
-                name, ext = os.path.splitext(camera)
-                name = int(name.split("_")[1]) + 1 # cams start at 01
+            camera_folder_name = all_cameras_folder / frame_type / f"cam{name:02}" # 4DGS standard
+            #print(name_folder, "--", file_name)
+            if not camera_folder_name.exists():
+                camera_folder_name.mkdir(parents=True)
 
+            dst = f"{str(camera_folder_name)}/frame_{int(frame_number.stem):05}.png"
 
-                name_folder = os.path.join(cameras_folder, frame_type, f"cam{name:02}") # 4DGS standard
-                #print(name_folder, "--", file_name)
-                if not os.path.exists(name_folder):
-                    os.makedirs(name_folder)
-
-                shutil.copyfile(file_name, f"{name_folder}/frame_{int(frame_number):05}.png") # 4DGS standard
+            shutil.copyfile(str(camera), dst) # 4DGS standard
 
     print("Creating Videos")
-    for frame_type in frame_types:
-        camera_files = [f for f in os.listdir(os.path.join(cameras_folder, frame_type))]
-        for file in camera_files:
-            create_video(os.path.join(cameras_folder, frame_type, file))
+    for all_frames_folder in (all_cameras_folder / frame_type).iterdir():
+        create_video(all_frames_folder)
 
 
 def visualize_pixel_masks(full_res_mask, image, path, title):
@@ -412,16 +410,16 @@ def estimate_background(video):
 
 
 def main():
-    results_folder = "/home/emmahaidacher/Masterthesis/MasterThesis/good_results/espresso_fixedpose_2cams_60frames_mast3r_sameguidance_det-sampling_temp/results"
-    cameras_folder = "/home/emmahaidacher/Masterthesis/MasterThesis/good_results/espresso_fixedpose_2cams_60frames_mast3r_sameguidance_det-sampling_temp/cameras"
+    results_folder = Path("/media/emmahaidacher/Volume/TESTS/debug_test/results")
+    cameras_folder = Path("/media/emmahaidacher/Volume/TESTS/debug_test/cameras")
     # input_vid = "/home/emmahaidacher/Masterthesis/MasterThesis/noisy_espresso_video/test.mp4"
     # output_folder = "/home/emmahaidacher/Masterthesis/MasterThesis/noisy_espresso_video/frames"
     # extract_frames(input_vid, output_folder)
-    img1 = "/media/emmahaidacher/Volume/GOOD_RESULTS/espresso_1cam_16frames_pickle_deflick_reuse_latent_alpha8/camera_frames/0/00001.png"
-    img2 = "/media/emmahaidacher/Volume/GOOD_RESULTS/espresso_1cam_16frames_pickle_deflick_reuse_latent_alpha8/camera_frames/0/00002.png"
-    vid = "/media/emmahaidacher/Volume/DATASETS/INTERNET/espresso_short/1_video_short/0.mp4"
-    estimate_background(vid)
-    #separate_cameras(results_folder, cameras_folder)
+    # img1 = "/media/emmahaidacher/Volume/GOOD_RESULTS/espresso_1cam_16frames_pickle_deflick_reuse_latent_alpha8/camera_frames/0/00001.png"
+    # img2 = "/media/emmahaidacher/Volume/GOOD_RESULTS/espresso_1cam_16frames_pickle_deflick_reuse_latent_alpha8/camera_frames/0/00002.png"
+    # vid = "/media/emmahaidacher/Volume/DATASETS/INTERNET/espresso_short/1_video_short/0.mp4"
+    # estimate_background(vid)
+    separate_cameras(results_folder, cameras_folder, DIFFUSION_FRAMES)
 
 if __name__ == "__main__":
     main()
