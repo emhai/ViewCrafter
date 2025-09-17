@@ -60,7 +60,7 @@ def extract_frames(video_path, frames_path):
     print(f"Extracting frames from {video_path}")
 
     #  '-hide_banner', '-log_level', 'error'
-    ffmpeg_command = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-i', video_path.as_posix(), f"{frames_path.as_posix()}/%05d.png"]
+    ffmpeg_command = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-i', str(video_path), f"{str(frames_path)}/%05d.png"]
     subprocess.run(ffmpeg_command)
 
 def create_folder_structure(folders):
@@ -82,7 +82,7 @@ def setup_structure(save_path, source_path, num_frames):
 
     # copy video folder
     for source_video in source_path.iterdir():
-        cam = cv2.VideoCapture(source_video.as_posix())
+        cam = cv2.VideoCapture(str(source_video))
         fps = cam.get(cv2.CAP_PROP_FPS)
         w, h = cam.get(cv2.CAP_PROP_FRAME_WIDTH), cam.get(cv2.CAP_PROP_FRAME_HEIGHT)
 
@@ -160,14 +160,15 @@ def separate_cameras(results_folder, cameras_folder):
             for camera in os.listdir(frame_folder):
                 file_name = os.path.join(frame_folder, camera)
                 name, ext = os.path.splitext(camera)
-                name = name.split("_")[1]
+                name = int(name.split("_")[1]) + 1 # cams start at 01
 
-                name_folder = os.path.join(cameras_folder, frame_type, f"camera_{name}")
+
+                name_folder = os.path.join(cameras_folder, frame_type, f"cam{name:02}") # 4DGS standard
                 #print(name_folder, "--", file_name)
                 if not os.path.exists(name_folder):
                     os.makedirs(name_folder)
 
-                shutil.copyfile(file_name, f"{name_folder}/{frame_number}.png")
+                shutil.copyfile(file_name, f"{name_folder}/frame_{int(frame_number):05}.png") # 4DGS standard
 
     print("Creating Videos")
     for frame_type in frame_types:

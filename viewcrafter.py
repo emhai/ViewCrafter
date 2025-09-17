@@ -30,6 +30,7 @@ import torchvision.transforms as transforms
 from PIL import Image
 from utils.pvd_utils import *
 from utils.v2v_utils import *
+from utils.gaussplat_utils import *
 from lvdm.models.samplers.ddim import DDIMSampler
 from lvdm.models.samplers.ddim_multiplecond import DDIMSampler as DDIMSampler_multicond
 from omegaconf import OmegaConf
@@ -846,6 +847,7 @@ class ViewCrafter:
             self.run_number += 1
 
         separate_cameras(results_dir, os.path.join(original_save_dir, SEPERATED_CAMERAS_DIR))
+        setup_4dgs_from_videos(os.path.join(original_save_dir, SEPERATED_CAMERAS_DIR), self.opts.exp_name)
 
 
     def setup_diffusion(self):
