@@ -1,6 +1,7 @@
 import shutil
 import sys
 
+
 sys.path.append('./extern/dust3r')
 sys.path.append('./extern/mast3r')
 
@@ -33,6 +34,7 @@ from utils.pvd_utils import *
 from utils.v2v_utils import *
 from utils.fdgs_utils import *
 from utils.easi3r_utils import *
+from utils.visualization_utils import *
 
 from lvdm.models.samplers.ddim import DDIMSampler
 from lvdm.models.samplers.ddim_multiplecond import DDIMSampler as DDIMSampler_multicond
@@ -252,7 +254,7 @@ class ViewCrafter:
         if self.mask_type in [MaskType.EASI3R_PREV, MaskType.EASI3R_FIRST]:
             mask_dir = self.base_dir / EASI3R_MASKS_INPUT_DIR / str(self.run_number)
             mask_folders = sorted(mask_dir.iterdir())
-            return load_easi3r_masks(mask_folders, current_image, mask_save_path)
+            return load_easi3r_masks(mask_folders, current_image, H=self.opts.height // 2, W=self.opts.width // 2, output_dir=mask_save_path)
 
         if self.mask_type == MaskType.COMP_WITH_FIRST:
             return create_frame_diff_masks(self.first_image, current_image, output_dir=mask_save_path, threshold=0.01)
@@ -748,7 +750,7 @@ class ViewCrafter:
 
         print(all_frames)
         for frame in all_frames:
-            print("running frame", int(frame) + 1, "/", len(all_frames), "run_no: ", self.run_number)
+            print("running frame", int(frame), "/", len(all_frames), "run_no: ", self.run_number)
             start = time.time()
 
             current_input_dir = input_dir / frame
@@ -791,8 +793,8 @@ class ViewCrafter:
         separate_cameras(results_dir, cameras_dir, DIFFUSION_FRAMES)
         separate_cameras(results_dir, cameras_dir, RENDER_FRAMES)
 
-        setup_4dgs_from_viewcrafter(cameras_dir, self.opts.exp_name)
-        run_4dgs(self.opts.exp_name)
+        # setup_4dgs_from_viewcrafter(cameras_dir, self.opts.exp_name)
+        # run_4dgs(self.opts.exp_name)
 
 
     def setup_diffusion(self):

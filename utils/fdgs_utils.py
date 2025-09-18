@@ -6,6 +6,8 @@ import shlex
 
 from PIL import Image
 
+from configs.v2v_config import DIFFUSION_FRAMES
+
 PATH_TO_4DGS = Path("/home/emmahaidacher/Desktop/4DGaussians")
 
 
@@ -68,7 +70,8 @@ def setup_4dgs_from_viewcrafter(cameras_path, exp_name):
     output_folder = PATH_TO_4DGS / "data" / "multipleview" / exp_name
     output_folder.mkdir()
 
-    for folder in cameras_path.iterdir():
+    diffusion_folder = cameras_path / DIFFUSION_FRAMES
+    for folder in diffusion_folder.iterdir():
         if folder.is_dir():
             shutil.copytree(str(folder), str(output_folder / folder.name))
 
@@ -96,13 +99,27 @@ def from_png_to_jpg(folder):
         img.save(out_path, "JPEG")
         p.unlink()
 
+def rename_frames(folder):
+    folder = Path(folder)
+
+    files = sorted(
+        (p for p in folder.rglob("frame_*.jpg")),
+        key=lambda p: int(p.stem.split("_")[-1]),
+        reverse=True,
+    )
+
+    for p in files:
+        num = int(p.stem.split("_")[-1])
+        p.rename(p.with_name(f"frame_{num + 1:05}.jpg"))
+
 def main():
-    path = Path("/home/emmahaidacher/Desktop/4DGaussians/data/multipleview/test/")
+    path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/20250917_1637_espresso_single_4dgs/cameras/")
     # setup_4dgs_from_videos(path, "test")
 
-    # setup_4dgs_from_viewcrafter(path, "test")
-    from_png_to_jpg(path)
-    run_4dgs("test")
+    # from_png_to_jpg(path)
+    # rename_frames(path)
+    setup_4dgs_from_viewcrafter(path, "test2")
+    run_4dgs("test2")
 
 if __name__ == '__main__':
     main()

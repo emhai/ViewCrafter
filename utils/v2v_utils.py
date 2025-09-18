@@ -118,14 +118,15 @@ def separate_cameras(results_folder, all_cameras_folder, frame_type):
 
         frame_folder = frame_number / frame_type # diffusion_frames or render_frames
         for camera in frame_folder.iterdir(): # n synthesized cameras
-            name = int(camera.stem.split("_")[1]) + 1 # cams start at 01
+            cam_name = int(camera.stem.split("_")[1]) # starts at frame_0001 -> 1 -> cam01
+            frame_name = int(frame_number.stem) + 1 # starts at results 0 -> 1 -> frame_00001
 
-            camera_folder_name = all_cameras_folder / frame_type / f"cam{name:02}" # 4DGS standard
+            camera_folder_name = all_cameras_folder / frame_type / f"cam{cam_name:02}" # 4DGS standard
             #print(name_folder, "--", file_name)
             if not camera_folder_name.exists():
                 camera_folder_name.mkdir(parents=True)
 
-            dst = f"{str(camera_folder_name)}/frame_{int(frame_number.stem):05}.png"
+            dst = f"{str(camera_folder_name)}/frame_{frame_name:05}.jpg"
 
             shutil.copyfile(str(camera), dst) # 4DGS standard
 

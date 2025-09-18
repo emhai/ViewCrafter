@@ -13,6 +13,18 @@ from utils.visualization_utils import visualize_pixel_masks
 
 PATH_TO_EASI3R = Path("/home/emmahaidacher/Desktop/Easi3R")
 
+def center_crop(img, target_height, target_width):
+
+    width, height = img.size  # PIL gives (w, h)
+
+    left = (width - target_width) // 2
+    top = (height - target_height) // 2
+    right = left + target_width
+    bottom = top + target_height
+
+    return img.crop((left, top, right, bottom))
+
+
 def load_easi3r_masks(input_paths, current_imgs, H=256, W=512, output_dir=None):
 
     # creates masks of shape (1, 1, H /2, W/2) # same dim as point cloud created by dust3r
@@ -25,8 +37,11 @@ def load_easi3r_masks(input_paths, current_imgs, H=256, W=512, output_dir=None):
     for i in range(len(input_paths)):
 
         easier_mask = Image.open(input_paths[i]).convert("L")
+
+        # cropped_mask = center_crop(easier_mask, H, W)  # crop t
+
         crop = CenterCrop((H, W))
-        cropped_mask = crop(easier_mask, H, W)
+        cropped_mask = crop(easier_mask)
 
         to_tensor = transforms.ToTensor()  # Converts to float tensor in range [0, 1]
         mask_tensor = to_tensor(cropped_mask)

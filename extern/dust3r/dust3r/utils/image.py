@@ -110,7 +110,7 @@ def load_images(folder_or_list, size, square_ok=False,force_1024 = False, force_
             continue
         img = exif_transpose(PIL.Image.open(os.path.join(root, path))).convert('RGB')
         if force_1024:
-            img = center_crop_pil_image(img, target_width=force_width, target_height=force_height)
+            img = center_crop_pil_image(img)
         img_ori = img
         W1, H1 = img.size
         if size == 224:
