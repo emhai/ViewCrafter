@@ -87,7 +87,7 @@ def setup_4dgs_from_videos(video_folder, exp_name):
         print(f"Extracting frames from {video}")
         target_path.mkdir()
 
-        cmd = f'ffmpeg -start_number 1 -i {str(video)} {str(target_path)}/frame_%05d.jpg'
+        cmd = f'ffmpeg  -i {str(video)} -start_number 1 {str(target_path)}/frame_%05d.jpg'
         run_command(cmd)
 
 def from_png_to_jpg(folder):
@@ -112,14 +112,27 @@ def rename_frames(folder):
         num = int(p.stem.split("_")[-1])
         p.rename(p.with_name(f"frame_{num + 1:05}.jpg"))
 
+def rename_frames_from_number(folder):
+    folder = Path(folder)
+
+    files = sorted(
+        (p for p in folder.rglob("000*.jpg")),
+        key=lambda p: int(p.stem),
+        reverse=True,
+    )
+
+    for p in files:
+        num = int(p.stem)
+        p.rename(p.with_name(f"frame_{num:05}.jpg"))
+
 def main():
-    path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/20250917_1637_espresso_single_4dgs/cameras/")
-    # setup_4dgs_from_videos(path, "test")
+    path = Path("/media/emmahaidacher/Volume/DATASETS/INTERNET/espresso_short/4dgs_1_cam/")
+    setup_4dgs_from_videos(path, "espresso_1_cam")
 
     # from_png_to_jpg(path)
-    # rename_frames(path)
-    setup_4dgs_from_viewcrafter(path, "test2")
-    run_4dgs("test2")
+    # rename_frames_from_number(path)
+    # setup_4dgs_from_viewcrafter(path, "multicam_w_original_vids")
+    # run_4dgs("multicam_w_original_vids")
 
 if __name__ == '__main__':
     main()

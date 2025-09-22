@@ -3,6 +3,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import cv2
+from moviepy.video.io.ffmpeg_tools import ffmpeg_resize
 from torchvision.transforms import CenterCrop
 
 from configs.v2v_config import *
@@ -13,16 +15,18 @@ from utils.visualization_utils import visualize_pixel_masks
 
 PATH_TO_EASI3R = Path("/home/emmahaidacher/Desktop/Easi3R")
 
-def center_crop(img, target_height, target_width):
 
-    width, height = img.size  # PIL gives (w, h)
+def downsample_video(input_video, factor):
 
-    left = (width - target_width) // 2
-    top = (height - target_height) // 2
-    right = left + target_width
-    bottom = top + target_height
+    output_folder = input_video.parent
+    cam = cv2.VideoCapture(str(input_video))
+    w, h = cam.get(cv2.CAP_PROP_FRAME_WIDTH), cam.get(cv2.CAP_PROP_FRAME_HEIGHT)
 
-    return img.crop((left, top, right, bottom))
+    tw, th = w // factor, h // factor   # resizing necessary for too high quality videos, otherwise CUDA OOM
+    print(f"Resizing from {w}x{h} to {tw}x{th}")
+    target_video_path = output_folder / f"{input_video.stem}_{factor}.mp4"
+    # for correct aspect ratio h=-2 https://stackoverflow.com/questions/8218363/maintaining-aspect-ratio-with-ffmpeg
+    ffmpeg_resize(input_video, target_video_path, (tw, -2))
 
 
 def load_easi3r_masks(input_paths, current_imgs, H=256, W=512, output_dir=None):
@@ -37,8 +41,6 @@ def load_easi3r_masks(input_paths, current_imgs, H=256, W=512, output_dir=None):
     for i in range(len(input_paths)):
 
         easier_mask = Image.open(input_paths[i]).convert("L")
-
-        # cropped_mask = center_crop(easier_mask, H, W)  # crop t
 
         crop = CenterCrop((H, W))
         cropped_mask = crop(easier_mask)
@@ -56,7 +58,33 @@ def load_easi3r_masks(input_paths, current_imgs, H=256, W=512, output_dir=None):
 
     return all_masks
 
-def run_easi3r(base_path, n_frames):
+
+def run_easi3r_from_video(input_video, output_dir, name, n_frames):
+
+    env = os.environ.copy()
+    env["CUDA_VISIBLE_DEVICES"] = "0"
+    env["OPENBLAS_NUM_THREADS"] = "1"
+
+    cmd = (f"conda run -n easi3r --no-capture-output python -u {PATH_TO_EASI3R}/demo.py "
+           f"--weights {PATH_TO_EASI3R}/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth "
+           f"--seq_name {name} "
+           f"--input {input_video} "
+           f"--output_dir {output_dir} "
+           f"--sam2_mask_refine "
+           f"--num_frames {n_frames} "
+           f"--silent")
+
+    # add --silent for non-verbose
+
+    print(">> Running Easi3r")
+
+    proc = subprocess.Popen(cmd, env=env, shell=True, cwd=PATH_TO_EASI3R)
+    ret = proc.wait()
+    if ret != 0:
+        print(f"Easi3R failed with exit code {ret}")
+
+
+def run_easi3r_from_viewcrafter(base_path, n_frames):
 
     original_videos_dir = base_path / ORIGINAL_VIDEOS_DIR
 
@@ -86,7 +114,7 @@ def run_easi3r(base_path, n_frames):
 
         # add --silent for non-verbose
 
-        print(">> Running Easi3r")
+        print(f">> Running Easi3r on {video}")
 
         proc = subprocess.Popen(cmd, env=env, shell=True, cwd=PATH_TO_EASI3R)
         ret = proc.wait()
@@ -96,7 +124,10 @@ def run_easi3r(base_path, n_frames):
         pickle_src = easi3r_results_dir / name / "pickle.pkl"
         os.mkdir(pickle_path / name)
         pickle_dst = pickle_path / name / "pickle.pkl"
-        shutil.copyfile(pickle_src, pickle_dst)
+        if pickle_src.exists():
+            shutil.copyfile(pickle_src, pickle_dst)
+        else:
+            print("pickle doesnt exist")
 
     easi3r_results = sorted(easi3r_results_dir.iterdir())
     dyn_mask_folders = [folder / "frames_dynamic_masks" for folder in easi3r_results]
@@ -115,3 +146,16 @@ def run_easi3r(base_path, n_frames):
             shutil.copyfile(src, dst)
 
     print("done")
+
+def main():
+    path = Path("/media/emmahaidacher/Volume/DATASETS/INTERNET/espresso_short/4dgs_1_cam_downsampled")
+    # video = path / "4.mp4"
+    # res = [2, 4, 8]
+    # for r in res:
+    #     downsample_video(video, r)
+
+    for video in path.iterdir():
+        run_easi3r_from_video(video, path, video.stem, 60)
+
+if __name__ == "__main__":
+    main()

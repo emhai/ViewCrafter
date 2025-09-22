@@ -80,7 +80,7 @@ class ViewCrafter:
             self.base_dir = Path(self.opts.save_dir)
             setup_structure(self.base_dir, Path(self.opts.image_dir), self.opts.n_frames)
 
-            run_easi3r(self.base_dir, self.opts.n_frames)
+            run_easi3r_from_viewcrafter(self.base_dir, self.opts.n_frames)
 
             return
 
@@ -204,7 +204,7 @@ class ViewCrafter:
             batch_samples, current_x0, intermediates = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
                                                    self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
                                                    self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-                                                   condition_index, guidance_image=None, latent=latent, latents=latents, mask=masks, ddim_sampler=self.ddim_sampler)
+                                                   condition_index, guidance_image=self.guidance_image, latent=latent, latents=latents, mask=masks, ddim_sampler=self.ddim_sampler)
 
             if self.run_number == 0:
                 self.first_latent = current_x0
@@ -352,9 +352,9 @@ class ViewCrafter:
         t_shape = self.images[0]['true_shape']
         t_H, t_W = int(t_shape[0][0]), int(t_shape[0][1])
 
-        # pickle_dir = Path(self.base_dir) / PICKLES_DIR # todo figure out
-        # pickle_file = next(pickle_dir.iterdir()).glob("*")
-        with open(Path(self.base_dir) / PICKLES_DIR / "4" / "pickle.pkl", 'rb') as f:
+        pickle_dir = Path(self.base_dir) / PICKLES_DIR
+        pickle_file = list(pickle_dir.rglob("*.pkl"))[0]
+        with open(pickle_file, 'rb') as f:
             pickle_im_poses = pickle.load(f)
             pickle_im_poses = pickle_im_poses[self.run_number].unsqueeze(0)
 
@@ -793,8 +793,8 @@ class ViewCrafter:
         separate_cameras(results_dir, cameras_dir, DIFFUSION_FRAMES)
         separate_cameras(results_dir, cameras_dir, RENDER_FRAMES)
 
-        # setup_4dgs_from_viewcrafter(cameras_dir, self.opts.exp_name)
-        # run_4dgs(self.opts.exp_name)
+        setup_4dgs_from_viewcrafter(cameras_dir, self.opts.exp_name)
+        run_4dgs(self.opts.exp_name)
 
 
     def setup_diffusion(self):

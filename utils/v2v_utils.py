@@ -20,12 +20,14 @@ from utils.pvd_utils import save_pointcloud_with_normals, get_pc, center_crop_im
 from utils.visualization_utils import visualize_pixel_masks
 
 
-def extract_frames(video_path, frames_path):
+def extract_frames(video_path, frames_path, n_frames):
     print(f"Extracting frames from {video_path}")
 
     #  '-hide_banner', '-log_level', 'error'
-    ffmpeg_command = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-i', str(video_path), f"{str(frames_path)}/%05d.png"]
+    ffmpeg_command = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-i', str(video_path), "-vf", f"select='between(n,0,{n_frames - 1})'",
+    "-vsync", "0", f"{str(frames_path)}/%05d.png"]
     subprocess.run(ffmpeg_command)
+
 
 def create_folder_structure(folders):
     for folder in folders:
@@ -54,12 +56,12 @@ def setup_structure(save_path, source_path, num_frames):
         # tw, th = w // 2, h // 2   # resizing necessary for too high quality videos, otherwise CUDA OOM
         # print(f"Resizing from {w}x{h} to {tw}x{th}")
         target_video_path = video_path / source_video.name
-        target_num_frames =  (num_frames - 1) / fps
-        ffmpeg_extract_subclip(source_video, 0, target_num_frames, targetname=target_video_path)
+        # target_num_frames =  (num_frames - 1) / fps
+        # ffmpeg_extract_subclip(source_video, 0, target_num_frames, targetname=target_video_path)
         # ffmpeg_resize(temp_video_path, target_video_path, (tw, th))
         # temp_video_path.unlink()
 
-        # shutil.copy(source_path, video_path)
+        shutil.copy(source_video, target_video_path)
 
     print(f"Copying videos from {source_path} to {video_path}")
 
@@ -67,7 +69,7 @@ def setup_structure(save_path, source_path, num_frames):
     for video in video_path.iterdir():
         new_path = frames_path / video.stem
         new_path.mkdir()
-        extract_frames(video, new_path)
+        extract_frames(video, new_path, num_frames)
 
     frame_folders = sorted(frames_path.iterdir())
     frame_files = [sorted(files.iterdir()) for files in frame_folders]
@@ -97,7 +99,7 @@ def create_video(input_folder):
     height, width, layers = frame.shape
 
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    fps = 30
+    fps = 15
     video = cv2.VideoWriter(video_path, fourcc, fps, (width, height))
 
     # Write images to video
