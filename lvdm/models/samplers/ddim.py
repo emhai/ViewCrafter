@@ -6,6 +6,8 @@ from lvdm.common import noise_like
 from lvdm.common import extract_into_tensor
 import copy
 
+from lvdm.modules.attention import MSATracker
+
 
 class DDIMSampler(object):
     def __init__(self, model, schedule="linear", **kwargs):
@@ -14,6 +16,11 @@ class DDIMSampler(object):
         self.ddpm_num_timesteps = model.num_timesteps
         self.schedule = schedule
         self.counter = 0
+
+        self.all_sa_collect_cond = []
+        self.all_sa_collect_uncond = []
+
+        self.first_run = True
 
     def register_buffer(self, name, attr):
         if type(attr) == torch.Tensor:
@@ -169,8 +176,14 @@ class DDIMSampler(object):
 
         clean_cond = kwargs.pop("clean_cond", False)
         clean_cond = True
+
+        msa_tracker = MSATracker(start_step=4, start_layer=10)  # from MasaCtrl
+        # msa_tracker = MSATracker(start_step=0, start_layer=7) # from Pix2Video
+        # msa_tracker = MSATracker(start_step=4, start_layer=10)
+
         # cond_copy, unconditional_conditioning_copy = copy.deepcopy(cond), copy.deepcopy(unconditional_conditioning)
         for i, step in enumerate(iterator):
+            msa_tracker.cur_step = i
             index = total_steps - i - 1
 
             ts = torch.full((b,), step, device=device, dtype=torch.long)
@@ -194,7 +207,7 @@ class DDIMSampler(object):
                                       corrector_kwargs=corrector_kwargs,
                                       unconditional_guidance_scale=unconditional_guidance_scale,
                                       unconditional_conditioning=unconditional_conditioning,
-                                      mask=mask,x0=x0,fs=fs,guidance_rescale=guidance_rescale,
+                                      mask=mask,x0=x0,fs=fs, guidance_rescale=guidance_rescale, msa_tracker=msa_tracker,
                                       **kwargs)
             
 
@@ -212,7 +225,8 @@ class DDIMSampler(object):
     def p_sample_ddim(self, x, c, t, index, repeat_noise=False, use_original_steps=False, quantize_denoised=False,
                       temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None,
                       unconditional_guidance_scale=1., unconditional_conditioning=None,
-                      uc_type=None, conditional_guidance_scale_temporal=None,mask=None,x0=None,guidance_rescale=0.0,**kwargs):
+                      uc_type=None, conditional_guidance_scale_temporal=None,mask=None,x0=None,
+                      guidance_rescale=0.0, msa_tracker=None, **kwargs):
         b, *_, device = *x.shape, x.device
         if x.dim() == 5:
             is_video = True
@@ -222,10 +236,42 @@ class DDIMSampler(object):
         if unconditional_conditioning is None or unconditional_guidance_scale == 1.:
             model_output = self.model.apply_model(x, t, c, **kwargs) # unet denoiser
         else:
+
             ### do_classifier_free_guidance
             if isinstance(c, torch.Tensor) or isinstance(c, dict):
-                e_t_cond = self.model.apply_model(x, t, c, **kwargs)
-                e_t_uncond = self.model.apply_model(x, t, unconditional_conditioning, **kwargs)
+
+                sa_collect = None
+                sa_inject = None
+
+                # first run, no collected sa
+                if self.first_run:
+                    sa_collect = []
+                else:
+                    sa_inject = self.all_sa_collect_cond[msa_tracker.cur_step].copy()
+
+                msa_tracker.reset_att_layer()
+
+                e_t_cond = self.model.apply_model(x, t, c, sa_collect=sa_collect, sa_inject=sa_inject, msa_tracker=msa_tracker, **kwargs)
+
+                if self.first_run:
+                    self.all_sa_collect_cond.append(sa_collect)
+
+
+                sa_collect = None
+                sa_inject = None
+                if self.first_run:
+                    sa_collect = []
+                else:
+                    sa_inject = self.all_sa_collect_uncond[msa_tracker.cur_step].copy()
+
+                assert sa_collect is None or sa_inject is None, "cant have both"
+
+                msa_tracker.reset_att_layer()
+                e_t_uncond = self.model.apply_model(x, t, unconditional_conditioning, sa_collect=sa_collect, sa_inject=sa_inject, msa_tracker=msa_tracker, **kwargs)
+
+                if self.first_run:
+                    self.all_sa_collect_uncond.append(sa_collect)
+
             else:
                 raise NotImplementedError
 
