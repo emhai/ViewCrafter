@@ -78,6 +78,7 @@ class DDIMSampler(object):
                eta=0.,
                mask=None,
                x0=None,
+               conds_z0=0,
                temperature=1.,
                noise_dropout=0.,
                score_corrector=None,
@@ -92,7 +93,6 @@ class DDIMSampler(object):
                fs=None,
                timestep_spacing='uniform', #uniform_trailing for starting from last timestep
                guidance_rescale=0.0,
-               conds_z0=0,
                **kwargs
                ):
         
@@ -124,7 +124,9 @@ class DDIMSampler(object):
                                                     callback=callback,
                                                     img_callback=img_callback,
                                                     quantize_denoised=quantize_x0,
-                                                    mask=mask, x0=x0, conds_z0=conds_z0,
+                                                    mask=mask,
+                                                    x0=x0,
+                                                    conds_z0=conds_z0,
                                                     ddim_use_original_steps=False,
                                                     noise_dropout=noise_dropout,
                                                     temperature=temperature,
@@ -245,8 +247,10 @@ class DDIMSampler(object):
 
                 # first run, no collected sa
                 if self.first_run:
+                    print("Collecting SA")
                     sa_collect = []
                 else:
+                    print("Injecting SA")
                     sa_inject = self.all_sa_collect_cond[msa_tracker.cur_step].copy()
 
                 msa_tracker.reset_att_layer()

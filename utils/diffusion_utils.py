@@ -112,8 +112,8 @@ def get_latent_z(model, videos):
     z = rearrange(z, '(b t) c h w -> b c t h w', b=b, t=t)
     return z
 
-def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddim_steps=50, ddim_eta=1., \
-                        unconditional_guidance_scale=1.0, cfg_img=None, fs=None, text_input=False, multiple_cond_cfg=False,
+def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddim_steps=50, ddim_eta=1.,
+                           unconditional_guidance_scale=1.0, cfg_img=None, fs=None, text_input=False, multiple_cond_cfg=False,
                            timestep_spacing='uniform', guidance_rescale=0.0, condition_index=None, guidance_image=None,
                            latent=None, latents=None, mask=None, ddim_sampler=None, **kwargs):
 
@@ -192,12 +192,12 @@ def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddi
                                             eta=ddim_eta,
                                             cfg_img=cfg_img, 
                                             mask=cond_mask,
-                                            x0=cond_z0,
-                                                         conds_z0=conds_z0,
+                                            x0=cond_z0, # previous latent at t0
+                                            conds_z0=conds_z0, # all previous latents
                                             fs=fs,
                                             timestep_spacing=timestep_spacing,
                                             guidance_rescale=guidance_rescale,
-                                                         log_every_t=1,
+                                            log_every_t=1, # log every intermediate latent
                                             **kwargs
                                             )
 

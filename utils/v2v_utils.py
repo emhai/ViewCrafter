@@ -194,9 +194,30 @@ def estimate_background(video):
     cv2.imwrite('/media/emmahaidacher/Volume/TESTS/bg.png', background)
 
 
+def clean_empty_camera_folders():
+    base_folder = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/")
+    for sub in base_folder.iterdir():
+        if not sub.is_dir():
+            continue
+        cameras = sub / "cameras"
+        if cameras.exists() and cameras.is_dir():
+            if not any(cameras.iterdir()):  # cameras folder is empty
+                print(f"Deleting {sub} (empty cameras folder)")
+                shutil.rmtree(sub)
+            else:
+                print(f"Keeping {sub} (cameras has files)")
+        else:
+            items = list(sub.iterdir())
+            if len(items) == 1 and items[0].is_file() and items[0].name == "args.json":
+                print(f"Deleting {sub} (no cameras folder, only 1 item inside)")
+                shutil.rmtree(sub)
+            else:
+                print(f"Keeping {sub} (no cameras folder, more than 1 item)")
+            print(f"Skipping {sub} (no cameras folder)")
+
 def main():
-    results_folder = Path("/media/emmahaidacher/Volume/TESTS/debug_test/results")
-    cameras_folder = Path("/media/emmahaidacher/Volume/TESTS/debug_test/cameras")
+    # results_folder = Path("/media/emmahaidacher/Volume/TESTS/debug_test/results")
+    # cameras_folder = Path("/media/emmahaidacher/Volume/TESTS/debug_test/cameras")
     # input_vid = "/home/emmahaidacher/Masterthesis/MasterThesis/noisy_espresso_video/test.mp4"
     # output_folder = "/home/emmahaidacher/Masterthesis/MasterThesis/noisy_espresso_video/frames"
     # extract_frames(input_vid, output_folder)
@@ -204,7 +225,8 @@ def main():
     # img2 = "/media/emmahaidacher/Volume/GOOD_RESULTS/espresso_1cam_16frames_pickle_deflick_reuse_latent_alpha8/camera_frames/0/00002.png"
     # vid = "/media/emmahaidacher/Volume/DATASETS/INTERNET/espresso_short/1_video_short/0.mp4"
     # estimate_background(vid)
-    separate_cameras(results_folder, cameras_folder, DIFFUSION_FRAMES)
+    # separate_cameras(results_folder, cameras_folder, DIFFUSION_FRAMES)
+    clean_empty_camera_folders()
 
 if __name__ == "__main__":
     main()
