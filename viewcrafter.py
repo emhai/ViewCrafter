@@ -617,27 +617,33 @@ class ViewCrafter:
             mask_pc = True
 
         imgs = np.array(self.scene.imgs)
+        no_cameras = len(self.img_ori)
 
-        camera_traj, num_views = generate_traj_interp(c2ws, H, W, focals, principal_points, self.opts.video_length, self.device)
+        if no_cameras > 2:
+            camera_traj, num_views = generate_traj_interp_closed(c2ws, H, W, focals, principal_points, self.opts.video_length, self.device)
+        else:
+            camera_traj, num_views = generate_traj_interp(c2ws, H, W, focals, principal_points, self.opts.video_length, self.device)
+
         render_results, viewmask = self.run_render(pcd, imgs, masks, H, W, camera_traj, num_views)
         render_results = F.interpolate(render_results.permute(0, 3, 1, 2), size=(self.opts.height, self.opts.width), mode='bilinear',   align_corners=False).permute(0, 2, 3, 1)
 
-        for i in range(len(self.img_ori)):
-            render_results[i * (self.opts.video_length - 1)] = self.img_ori[i]
+        if no_cameras > 2:
+            indices = [i * (self.opts.video_length // no_cameras) for i in range(no_cameras + 1)]
+            cams = list(range(no_cameras)) + [0]
+        else:
+            indices = [0, self.opts.video_length - 1]
+            cams = [0, 1]
+
+        for i, j in zip(indices, cams):
+            render_results[i] = self.img_ori[j]
+
         save_video(render_results, os.path.join(self.opts.save_dir, f'render.mp4'), os.path.join(self.opts.save_dir, RENDER_FRAMES))
         save_pointcloud_with_normals(imgs, pcd, msk=masks, save_path=os.path.join(self.opts.save_dir, f'pcd.ply'), mask_pc=mask_pc, reduce_pc=False)
 
         latent_masks = self.complete_mask_creation(pcd, imgs, H, W, camera_traj, num_views)
 
-        diffusion_results = []
-        print(f'Generating {len(self.img_ori) - 1} clips\n')
-        for i in range(len(self.img_ori) - 1):
-            print(f'Generating clip {i} ...\n')
-            diffusion_results.append(self.run_diffusion(render_results[
-                                                        i * (self.opts.video_length - 1):self.opts.video_length + i * (
-                                                                    self.opts.video_length - 1)], latent_masks))
-        print(f'Finish!\n')
-        diffusion_results = torch.cat(diffusion_results)
+        diffusion_results = self.run_diffusion(render_results, latent_masks)
+
         save_video((diffusion_results + 1.0) / 2.0, os.path.join(self.opts.save_dir, f'diffusion.mp4'),
                    os.path.join(self.opts.save_dir, DIFFUSION_FRAMES))
         torch.Size([25, 576, 1024, 3])
@@ -806,6 +812,9 @@ class ViewCrafter:
         setup_4dgs_from_viewcrafter(cameras_dir, self.opts.exp_name)
         run_4dgs(self.opts.exp_name)
 
+        original_videos_4dgs = "original_" + self.opts.exp_name
+        setup_4dgs_from_videos(self.base_dir / ORIGINAL_VIDEOS_DIR, original_videos_4dgs)
+        run_4dgs(self.opts.exp_name)
 
     def setup_diffusion(self):
         seed_everything(self.opts.seed)
@@ -824,14 +833,7 @@ class ViewCrafter:
         model.eval()
         self.diffusion = model
 
-        def print_modules_with_depth(model, max_depth=3, prefix='', depth=0):
-            if depth > max_depth:
-                return
-            print(f"{'  ' * depth}{prefix}{model.__class__.__name__}")
-            for name, child in model.named_children():
-                print_modules_with_depth(child, max_depth, prefix=name + ': ', depth=depth + 1)
-
-        # print_modules_with_depth(model, max_depth=7)
+        print_diffusion_model(model, max_depth=7)
 
         h, w = self.opts.height // 8, self.opts.width // 8 # latent size
         channels = model.model.diffusion_model.out_channels

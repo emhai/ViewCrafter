@@ -215,6 +215,14 @@ def clean_empty_camera_folders():
                 print(f"Keeping {sub} (no cameras folder, more than 1 item)")
             print(f"Skipping {sub} (no cameras folder)")
 
+def print_diffusion_model(model, max_depth=3, prefix='', depth=0):
+    if depth > max_depth:
+        return
+    print(f"{'  ' * depth}{prefix}{model.__class__.__name__}")
+    for name, child in model.named_children():
+        print_diffusion_model(child, max_depth, prefix=name + ': ', depth=depth + 1)
+
+
 def main():
     # results_folder = Path("/media/emmahaidacher/Volume/TESTS/debug_test/results")
     # cameras_folder = Path("/media/emmahaidacher/Volume/TESTS/debug_test/cameras")

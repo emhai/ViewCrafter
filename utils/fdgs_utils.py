@@ -126,8 +126,9 @@ def rename_frames_from_number(folder):
         p.rename(p.with_name(f"frame_{num:05}.jpg"))
 
 def main():
-    path = Path("/media/emmahaidacher/Volume/DATASETS/INTERNET/espresso_short/4dgs_1_cam/")
-    setup_4dgs_from_videos(path, "espresso_1_cam")
+    path = Path("/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/4dgs_dataset/spinach_2/")
+    #setup_4dgs_from_videos(path, "spinach_2_cams")
+    run_4dgs("spinach_2_cams")
 
     # from_png_to_jpg(path)
     # rename_frames_from_number(path)

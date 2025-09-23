@@ -269,6 +269,93 @@ def generate_traj_interp(c2ws,H,W,fs,c,ns,device):
     
     return cameras, num_views
 
+def generate_traj_interp_closed(c2ws, H, W, fs, c, total_frames, device):
+    """
+    Build a closed camera path cam1->cam2->...->camN->cam1 with a *fixed total length*.
+    The path is distributed evenly across segments so the final sequence looks like:
+      cam1, [new...], cam2, [new...], ..., camN, [new...], cam1
+    Args:
+        c2ws:           [N,4,4] camera-to-worlds for the key views (e.g., 3 for cam1..cam3)
+        H, W:           image size
+        fs:             [N,2] focal lengths per key (fx, fy)
+        c:              [N,2] principal points per key (cx, cy)
+        total_frames:   total frames INCLUDING keys and the final wrap cam1 at the end
+        device:         torch device
+    Returns:
+        cameras:  pytorch3d PerspectiveCameras over the closed path
+        num_views: number of frames in the path (== total_frames)
+    """
+    n_keys = c2ws.shape[0]
+    assert n_keys >= 2, "Need at least 2 key cameras"
+    n_segments = n_keys  # wrap last->first
+    # frames = keys (n_keys) + inbetweens (?) + final wrap cam1 (1)
+    n_inbetweens_total = total_frames - n_keys - 1
+    assert n_inbetweens_total >= 0, "total_frames too small for the requested number of keys"
+
+    base = n_inbetweens_total // n_segments
+    rem  = n_inbetweens_total %  n_segments
+    inserts_per_segment = [(base + (1 if i < rem else 0)) for i in range(n_segments)]
+
+    # ---- Pose interpolation (closed) ----
+    # We’ll reuse your SLERP-based pose interpolation so orientation stays smooth. :contentReference[oaicite:2]{index=2}
+    segments_poses = []
+    for i in range(n_segments):
+        start_pose = c2ws[i]
+        end_pose   = c2ws[(i + 1) % n_keys]
+        focus_pt   = focus_point_fn(torch.stack([start_pose, end_pose]))  # keep radius consistent
+        k = inserts_per_segment[i]
+        # interpolate_poses returns [start, k inserts, end] (length k+2). :contentReference[oaicite:3]{index=3}
+        samples = interpolate_poses(start_pose, end_pose, focus_pt, n_inserts=k, device=device)
+        segments_poses.append(samples[:-1])  # keep start + inserts, drop 'end' (next segment will include it)
+
+    poses_closed = torch.cat(segments_poses + [c2ws[0:1]], dim=0)  # append cam1 to close
+
+    # ---- Intrinsics interpolation (closed) ----
+    # Build fs/c per-frame to match poses_closed. We linearly interpolate per segment,
+    # using k+1 samples (start + k inserts), dropping the segment end just like poses.
+    def interp_intrinsics_closed(seq, inserts_list):
+        # seq: [N,2], returns [total_frames, 2]
+        chunks = []
+        n_keys = seq.shape[0]
+        for i, k in enumerate(inserts_list):
+            left = seq[i]  # [2]
+            right = seq[(i + 1) % n_keys]  # [2]
+            # We want k+1 samples per segment to match poses[:-1] (start + k inserts, no end).
+            # So create k+2 points (0..1) and drop the last (the "end").
+            ws = torch.linspace(0, 1, k + 2, device=seq.device)[:-1]  # length = k+1
+            block = (1 - ws).unsqueeze(-1) * left.unsqueeze(0) + ws.unsqueeze(-1) * right.unsqueeze(0)  # [k+1, 2]
+            chunks.append(block)
+        # finally append the very first key again for the wrap
+        return torch.cat(chunks + [seq[0:1]], dim=0)
+
+    fs_seq = interp_intrinsics_closed(fs, inserts_per_segment)  # [total_frames, 2]
+    c_seq  = interp_intrinsics_closed(c,  inserts_per_segment)  # [total_frames, 2]
+
+    assert poses_closed.shape[0] == total_frames, "Pose count mismatches total_frames"
+    assert fs_seq.shape[0]      == total_frames and c_seq.shape[0] == total_frames
+
+    # ---- To PerspectiveCameras (same convention fixes as your other generators) ----
+    Rw, Tw = poses_closed[:, :3, :3], poses_closed[:, :3, 3:]
+    Rw2 = torch.stack([-Rw[:, :, 0], -Rw[:, :, 1], Rw[:, :, 2]], dim=2)  # RDF -> LUF :contentReference[oaicite:4]{index=4}
+    new_c2w = torch.cat([Rw2, Tw], dim=2)
+    w2c = torch.linalg.inv(torch.cat(
+        (new_c2w, torch.tensor([[[0, 0, 0, 1]]], device=device).repeat(new_c2w.shape[0], 1, 1)), dim=1
+    ))
+    R_cam = w2c[:, :3, :3].permute(0, 2, 1)  # row-major
+    T_cam = w2c[:, :3, 3]
+    image_size = ((H, W),)
+
+    cameras = PerspectiveCameras(
+        focal_length=fs_seq,
+        principal_point=c_seq,
+        in_ndc=False,
+        image_size=image_size,
+        R=R_cam,
+        T=T_cam,
+        device=device
+    )
+    return cameras, total_frames
+
 def generate_traj_specified(c2ws_anchor,H,W,fs,c,theta, phi,d_r,d_x,d_y,frame,device):
     # Initialize a camera.
     """
