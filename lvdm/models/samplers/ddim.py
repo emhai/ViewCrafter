@@ -179,13 +179,17 @@ class DDIMSampler(object):
         clean_cond = kwargs.pop("clean_cond", False)
         clean_cond = True
 
-        msa_tracker = MSATracker(start_step=4, start_layer=10)  # from MasaCtrl
+        # msa_tracker = MSATracker(start_step=4, start_layer=10)  # from MasaCtrl
         # msa_tracker = MSATracker(start_step=0, start_layer=7) # from Pix2Video
         # msa_tracker = MSATracker(start_step=4, start_layer=10)
+        msa_tracker = None
 
         # cond_copy, unconditional_conditioning_copy = copy.deepcopy(cond), copy.deepcopy(unconditional_conditioning)
         for i, step in enumerate(iterator):
-            msa_tracker.cur_step = i
+
+            if msa_tracker is not None:
+                msa_tracker.cur_step = i
+
             index = total_steps - i - 1
 
             ts = torch.full((b,), step, device=device, dtype=torch.long)
@@ -235,6 +239,8 @@ class DDIMSampler(object):
         else:
             is_video = False
 
+        use_MSA = msa_tracker is not None
+
         if unconditional_conditioning is None or unconditional_guidance_scale == 1.:
             model_output = self.model.apply_model(x, t, c, **kwargs) # unet denoiser
         else:
@@ -245,35 +251,36 @@ class DDIMSampler(object):
                 sa_collect = None
                 sa_inject = None
 
-                # first run, no collected sa
-                if self.first_run:
-                    # print("Collecting SA")
-                    sa_collect = []
-                else:
-                    # print("Injecting SA")
-                    sa_inject = self.all_sa_collect_cond[msa_tracker.cur_step].copy()
+                if use_MSA:
+                    # first run, no collected sa
+                    if self.first_run:
+                        # print("Collecting SA")
+                        sa_collect = []
+                    else:
+                        # print("Injecting SA")
+                        sa_inject = self.all_sa_collect_cond[msa_tracker.cur_step].copy()
 
-                msa_tracker.reset_att_layer()
+                    msa_tracker.reset_att_layer()
 
                 e_t_cond = self.model.apply_model(x, t, c, sa_collect=sa_collect, sa_inject=sa_inject, msa_tracker=msa_tracker, **kwargs)
 
-                if self.first_run:
-                    self.all_sa_collect_cond.append(sa_collect)
+                if use_MSA:
+                    if self.first_run:
+                        self.all_sa_collect_cond.append(sa_collect)
 
+                    sa_collect = None
+                    sa_inject = None
+                    if self.first_run:
+                        sa_collect = []
+                    else:
+                        sa_inject = self.all_sa_collect_uncond[msa_tracker.cur_step].copy()
 
-                sa_collect = None
-                sa_inject = None
-                if self.first_run:
-                    sa_collect = []
-                else:
-                    sa_inject = self.all_sa_collect_uncond[msa_tracker.cur_step].copy()
+                    assert sa_collect is None or sa_inject is None, "cant have both"
+                    msa_tracker.reset_att_layer()
 
-                assert sa_collect is None or sa_inject is None, "cant have both"
-
-                msa_tracker.reset_att_layer()
                 e_t_uncond = self.model.apply_model(x, t, unconditional_conditioning, sa_collect=sa_collect, sa_inject=sa_inject, msa_tracker=msa_tracker, **kwargs)
 
-                if self.first_run:
+                if use_MSA and self.first_run:
                     self.all_sa_collect_uncond.append(sa_collect)
 
             else:
