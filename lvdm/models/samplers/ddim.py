@@ -247,10 +247,10 @@ class DDIMSampler(object):
 
                 # first run, no collected sa
                 if self.first_run:
-                    print("Collecting SA")
+                    # print("Collecting SA")
                     sa_collect = []
                 else:
-                    print("Injecting SA")
+                    # print("Injecting SA")
                     sa_inject = self.all_sa_collect_cond[msa_tracker.cur_step].copy()
 
                 msa_tracker.reset_att_layer()

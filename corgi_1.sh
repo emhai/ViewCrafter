@@ -1,8 +1,8 @@
 python inference.py \
---image_dir /media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/SelfCap/corgi3/ \
---out_dir /media/emmahaidacher/Volume/GOOD_RESULTS \
---mode multi_video_interp \
---bg_trd 0.2 \
+--image_dir /media/emmahaidacher/Volume/DATASETS/MASTER_DATASETS/corgi/corgi_1/ \
+--out_dir /media/emmahaidacher/Volume/GOOD_RESULTS/5_videos/ \
+--traj_txt test/v2v_trajs/espresso_loop.txt \
+--mode single_video_interp \
 --seed 123 \
 --ckpt_path ./checkpoints/model_16.ckpt \
 --config configs/inference_pvd_1024.yaml \
@@ -10,8 +10,8 @@ python inference.py \
 --ddim_eta 0.0 \
 --video_length 16 \
 --device cuda:0 \
---height  576 \
+--height 576 \
 --width 1024 \
 --model_path ./checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth \
---exp_name corgi \
+--exp_name corgi_1 \
 --n_frames 16

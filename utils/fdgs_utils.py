@@ -49,7 +49,7 @@ def run_4dgs(exp_name):
 
     # TRAINING
     print(">> TRAINING")
-    cmd = f'conda run -n Gaussians4D python train.py -s  data/multipleview/{exp_name} --port 6017 --expname "multipleview/{exp_name}" --configs arguments/multipleview/default.py'
+    cmd = f'conda run -n Gaussians4D python train.py -s  data/multipleview/yoga_og --port 6017 --expname "multipleview/yoga_og" --configs arguments/multipleview/default.py'
     run_command(cmd)
 
     # RENDERING
@@ -64,6 +64,23 @@ def run_4dgs(exp_name):
 
     print(">> 4DGS END")
 
+
+def create_4dgs_shell(exp_name, output_file):
+
+    commands = [
+        f'bash multipleviewprogress.sh {exp_name}',
+        f'python train.py -s data/multipleview/{exp_name} --port 6017 --expname "multipleview/{exp_name}" --configs arguments/multipleview/default.py',
+        f'python render.py --model_path "output/multipleview/{exp_name}" --skip_train --configs arguments/multipleview/default.py',
+        f'python metrics.py --model_path "output/multipleview/{exp_name}"',
+    ]
+
+    shell_path = Path(output_file)
+    with shell_path.open("w") as f:
+        f.write("#!/bin/bash\n\n")
+        for cmd in commands:
+            f.write(cmd + "\n")
+
+    shell_path.chmod(0o755)
 
 def setup_4dgs_from_viewcrafter(cameras_path, exp_name):
 
@@ -126,14 +143,23 @@ def rename_frames_from_number(folder):
         p.rename(p.with_name(f"frame_{num:05}.jpg"))
 
 def main():
-    path = Path("/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/4dgs_dataset/spinach_2/")
+    # vcpath = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/yoga/cameras/")
+    # setup_4dgs_from_viewcrafter(vcpath, "yoga_vc")
+    o_path = Path("/media/emmahaidacher/Volume/TESTS/test_sep/short_videos")
+    setup_4dgs_from_videos(o_path, "yoga_og_cropped")
     #setup_4dgs_from_videos(path, "spinach_2_cams")
-    run_4dgs("spinach_2_cams")
+    # run_4dgs("spinach_2_cams")
 
     # from_png_to_jpg(path)
     # rename_frames_from_number(path)
     # setup_4dgs_from_viewcrafter(path, "multicam_w_original_vids")
     # run_4dgs("multicam_w_original_vids")
+    path_to_scripts = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/scripts")
+    create_4dgs_shell("yoga_og_cropped", path_to_scripts / "yoga_og_cropped.sh")
+    # create_4dgs_shell("yoga_vc", path_to_scripts / "yoga_vc.sh")
+
+    # run_4dgs("yoga_vc")
+    # run_4dgs("yoga_og")
 
 if __name__ == '__main__':
     main()

@@ -1,6 +1,6 @@
 python inference.py \
---image_dir /media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/SelfCap/corgi3/ \
---out_dir /media/emmahaidacher/Volume/GOOD_RESULTS \
+--image_dir /media/emmahaidacher/Volume/DATASETS/MASTER_DATASETS/scene1872/dance_3/ \
+--out_dir /media/emmahaidacher/Volume/GOOD_RESULTS/5_videos/ \
 --mode multi_video_interp \
 --bg_trd 0.2 \
 --seed 123 \
@@ -13,5 +13,5 @@ python inference.py \
 --height  576 \
 --width 1024 \
 --model_path ./checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth \
---exp_name corgi \
+--exp_name dance_3\
 --n_frames 16

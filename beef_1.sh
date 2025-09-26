@@ -1,9 +1,8 @@
 python inference.py \
---image_dir /media/emmahaidacher/Volume/DATASETS/INTERNET/espresso_short/4dgs_1_cam_left \
---out_dir /media/emmahaidacher/Volume/GOOD_RESULTS \
+--image_dir /media/emmahaidacher/Volume/DATASETS/MASTER_DATASETS/cut_roasted_beef/beef_1/ \
+--out_dir /media/emmahaidacher/Volume/GOOD_RESULTS/5_videos/ \
 --traj_txt test/v2v_trajs/espresso_loop.txt \
 --mode single_video_interp \
---bg_trd 0.5 \
 --seed 123 \
 --ckpt_path ./checkpoints/model_16.ckpt \
 --config configs/inference_pvd_1024.yaml \
@@ -14,5 +13,5 @@ python inference.py \
 --height 576 \
 --width 1024 \
 --model_path ./checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth \
---exp_name espresso_single_4dgs \
+--exp_name beef_1 \
 --n_frames 16

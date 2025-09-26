@@ -19,14 +19,73 @@ import matplotlib.pyplot as plt
 from utils.pvd_utils import save_pointcloud_with_normals, get_pc, center_crop_image
 from utils.visualization_utils import visualize_pixel_masks
 
+TARGET_W, TARGET_H = 1024, 576
+TARGET_AR = TARGET_W / TARGET_H  # 16:9
 
-def extract_frames(video_path, frames_path, n_frames):
+def extract_frames(video_path, frames_path):
     print(f"Extracting frames from {video_path}")
 
     #  '-hide_banner', '-log_level', 'error'
-    ffmpeg_command = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-i', str(video_path), "-vf", f"select='between(n,0,{n_frames - 1})'",
-    "-vsync", "0", f"{str(frames_path)}/%05d.png"]
+    ffmpeg_command = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-i', str(video_path), f"{str(frames_path)}/%05d.png"]
     subprocess.run(ffmpeg_command)
+
+def center_crop_to_ratio(frame, target_ratio):
+    h, w = frame.shape[:2]
+    ar = w / h
+
+    if abs(ar - target_ratio) < 1e-3:
+        # Already at target aspect, no crop
+        return frame
+
+    if ar > target_ratio:
+        # Too wide -> crop width
+        new_w = int(round(h * target_ratio))
+        x0 = (w - new_w) // 2
+        x1 = x0 + new_w
+        return frame[:, x0:x1]
+    else:
+        # Too tall -> crop height
+        new_h = int(round(w / target_ratio))
+        y0 = (h - new_h) // 2
+        y1 = y0 + new_h
+        return frame[y0:y1, :]
+
+def extract_first_n_frames_opencv(src_path, dst_path, n, codec="mp4v"):
+    src_path = str(src_path)
+    dst_path = str(dst_path)
+
+    cap = cv2.VideoCapture(src_path)
+    if not cap.isOpened():
+        raise RuntimeError(f"Could not open {src_path}")
+
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0  # fallback if not reported
+    w  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h  = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+
+    fourcc = cv2.VideoWriter_fourcc(*codec)
+    out = cv2.VideoWriter(dst_path, fourcc, fps, (w, h))
+    if not out.isOpened():
+        cap.release()
+        raise RuntimeError(f"Could not open writer for {dst_path} with codec {codec}")
+
+    frames_written = 0
+    while frames_written < n:
+        ok, frame = cap.read()
+        if not ok:
+            break  # video shorter than N frames
+
+        # frame = center_crop_to_ratio(frame, TARGET_AR)
+        # resized = cv2.resize(frame, (TARGET_W, TARGET_H), interpolation=cv2.INTER_AREA)
+
+        out.write(frame)
+        frames_written += 1
+
+    cap.release()
+    out.release()
+
+    if frames_written != n:
+        print(f"Warning: source had only {frames_written} frames; wrote fewer than requested {n}.")
 
 
 def create_folder_structure(folders):
@@ -41,35 +100,31 @@ def setup_structure(save_path, source_path, num_frames):
     inputs_path = save_path / INPUTS_DIR
     results_path = save_path / RESULTS_DIR
     cameras_path = save_path / SEPERATED_CAMERAS_DIR
-    video_path = save_path / ORIGINAL_VIDEOS_DIR
+    og_video_path = save_path / ORIGINAL_VIDEOS_DIR
+    short_videos_path = save_path / SHORT_VIDEOS_DIR
 
-    all_folders = [frames_path, inputs_path, results_path, cameras_path, video_path]
+    all_folders = [frames_path, inputs_path, results_path, cameras_path, og_video_path, short_videos_path]
     create_folder_structure(all_folders)
 
     # copy video folder
     for source_video in source_path.iterdir():
         cam = cv2.VideoCapture(str(source_video))
-        fps = cam.get(cv2.CAP_PROP_FPS)
-        w, h = cam.get(cv2.CAP_PROP_FRAME_WIDTH), cam.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        w, h = cam.get(cv2.CAP_PROP_FRAME_WIDTH), cam.get(cv2.CAP_PROP_FRAME_HEIGHT) # if needed for OOM
 
-        temp_video_path = video_path / "temp.mp4"
-        # tw, th = w // 2, h // 2   # resizing necessary for too high quality videos, otherwise CUDA OOM
-        # print(f"Resizing from {w}x{h} to {tw}x{th}")
-        target_video_path = video_path / source_video.name
-        # target_num_frames =  (num_frames - 1) / fps
-        # ffmpeg_extract_subclip(source_video, 0, target_num_frames, targetname=target_video_path)
-        # ffmpeg_resize(temp_video_path, target_video_path, (tw, th))
-        # temp_video_path.unlink()
+        target_video_path = og_video_path / source_video.name
+        target_short_video_path = short_videos_path / source_video.name
+
+        extract_first_n_frames_opencv(source_video, target_short_video_path, num_frames, codec="mp4v")
 
         shutil.copy(source_video, target_video_path)
 
-    print(f"Copying videos from {source_path} to {video_path}")
+    print(f"Copying videos from {source_path} to {og_video_path}")
 
     # extract frames
-    for video in video_path.iterdir():
+    for video in short_videos_path.iterdir():
         new_path = frames_path / video.stem
         new_path.mkdir()
-        extract_frames(video, new_path, num_frames)
+        extract_frames(video, new_path)
 
     frame_folders = sorted(frames_path.iterdir())
     frame_files = [sorted(files.iterdir()) for files in frame_folders]
@@ -85,6 +140,8 @@ def setup_structure(save_path, source_path, num_frames):
             src = frame_folders[folder_idx] / frame_files[folder_idx][frame_idx]
             dst = new_input_folder / f"{folder_idx}.png"
             shutil.copyfile(src, dst)
+
+    print("done")
 
 def create_video(input_folder):
 
@@ -234,7 +291,11 @@ def main():
     # vid = "/media/emmahaidacher/Volume/DATASETS/INTERNET/espresso_short/1_video_short/0.mp4"
     # estimate_background(vid)
     # separate_cameras(results_folder, cameras_folder, DIFFUSION_FRAMES)
-    clean_empty_camera_folders()
+    input_path = Path("/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/SelfCap/yoga3/")
+    output_path = Path("/media/emmahaidacher/Volume/TESTS/test_sep")
+    output_path.mkdir(exist_ok=True)
+    setup_structure(output_path, input_path, 16)
+    # clean_empty_camera_folders()
 
 if __name__ == "__main__":
     main()

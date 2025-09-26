@@ -813,7 +813,7 @@ class ViewCrafter:
         run_4dgs(self.opts.exp_name)
 
         original_videos_4dgs = "original_" + self.opts.exp_name
-        setup_4dgs_from_videos(self.base_dir / ORIGINAL_VIDEOS_DIR, original_videos_4dgs)
+        setup_4dgs_from_videos(self.base_dir / SHORT_VIDEOS_DIR, original_videos_4dgs)
         run_4dgs(self.opts.exp_name)
 
     def setup_diffusion(self):
