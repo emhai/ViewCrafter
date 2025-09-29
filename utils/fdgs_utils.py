@@ -49,7 +49,7 @@ def run_4dgs(exp_name):
 
     # TRAINING
     print(">> TRAINING")
-    cmd = f'conda run -n Gaussians4D python train.py -s  data/multipleview/yoga_og --port 6017 --expname "multipleview/yoga_og" --configs arguments/multipleview/default.py'
+    cmd = f'conda run -n Gaussians4D python train.py -s  data/multipleview/{exp_name} --port 6017 --expname "multipleview/{exp_name}" --configs arguments/multipleview/default.py'
     run_command(cmd)
 
     # RENDERING
@@ -145,8 +145,8 @@ def rename_frames_from_number(folder):
 def main():
     # vcpath = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/yoga/cameras/")
     # setup_4dgs_from_viewcrafter(vcpath, "yoga_vc")
-    o_path = Path("/media/emmahaidacher/Volume/TESTS/test_sep/short_videos")
-    setup_4dgs_from_videos(o_path, "yoga_og_cropped")
+    # o_path = Path("/media/emmahaidacher/Volume/TESTS/test_sep/short_videos")
+    # setup_4dgs_from_videos(o_path, "yoga_og_cropped")
     #setup_4dgs_from_videos(path, "spinach_2_cams")
     # run_4dgs("spinach_2_cams")
 
@@ -155,7 +155,23 @@ def main():
     # setup_4dgs_from_viewcrafter(path, "multicam_w_original_vids")
     # run_4dgs("multicam_w_original_vids")
     path_to_scripts = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/scripts")
-    create_4dgs_shell("yoga_og_cropped", path_to_scripts / "yoga_og_cropped.sh")
+
+    GS_runs = ["yoga", "beef", "dance", "espresso", "corgi"]
+    numbers = ["1", "3"]
+    og = ["original_", ""]
+
+    # list comprehension
+    combinations = [prefix + run + "_" + num
+                    for prefix in og
+                    for run in GS_runs
+                    for num in numbers]
+
+    print(combinations)
+
+    for combi in combinations:
+        create_4dgs_shell(combi, path_to_scripts / f"{combi}.sh")
+
+    # create_4dgs_shell("yoga_og_cropped", path_to_scripts / "yoga_og_cropped.sh")
     # create_4dgs_shell("yoga_vc", path_to_scripts / "yoga_vc.sh")
 
     # run_4dgs("yoga_vc")

@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 import cv2
+import torch
 from moviepy.video.io.ffmpeg_tools import ffmpeg_resize
 from torchvision.transforms import CenterCrop
 
@@ -29,7 +30,7 @@ def downsample_video(input_video, factor):
     ffmpeg_resize(input_video, target_video_path, (tw, -2))
 
 
-def load_easi3r_masks(input_paths, current_imgs, H=256, W=512, output_dir=None):
+def load_easi3r_masks(input_paths, prev_input_paths, current_imgs, H=256, W=512, output_dir=None):
 
     # creates masks of shape (1, 1, H /2, W/2) # same dim as point cloud created by dust3r
     if not isinstance(current_imgs, list):
@@ -41,20 +42,26 @@ def load_easi3r_masks(input_paths, current_imgs, H=256, W=512, output_dir=None):
     for i in range(len(input_paths)):
 
         easier_mask = Image.open(input_paths[i]).convert("L")
+        prev_easier_mask = Image.open(prev_input_paths[i]).convert("L")
 
         crop = CenterCrop((H, W))
         cropped_mask = crop(easier_mask)
+        prev_cropped_mask = crop(prev_easier_mask)
 
         to_tensor = transforms.ToTensor()  # Converts to float tensor in range [0, 1]
         mask_tensor = to_tensor(cropped_mask)
+        prev_mask_tensor = to_tensor(prev_cropped_mask)
+
+        combined_mask = (mask_tensor + prev_mask_tensor).clamp(0.0, 1.0)
+
         # mask_tensor = 1.0 - mask_tensor # invert to fit with ddim sampling blending
-        mask_tensor = mask_tensor.unsqueeze(0)
-        print(mask_tensor.shape)
+        combined_mask = combined_mask.unsqueeze(0)
+        print(combined_mask.shape)
 
         if output_dir is not None:
-            visualize_pixel_masks(mask_tensor, current_imgs[i], output_dir / f"easi3r_mask_{i}.png", "easi3r mask for this frame")
+            visualize_pixel_masks(combined_mask, current_imgs[i], output_dir / f"easi3r_mask_{i}.png", "easi3r mask for this frame")
 
-        all_masks.append(mask_tensor.bool().squeeze())
+        all_masks.append(combined_mask.bool().squeeze())
 
     return all_masks
 

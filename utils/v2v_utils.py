@@ -280,6 +280,31 @@ def print_diffusion_model(model, max_depth=3, prefix='', depth=0):
         print_diffusion_model(child, max_depth, prefix=name + ': ', depth=depth + 1)
 
 
+def clean_mask(input_mask):
+    # load image
+    # img = cv2.imread("mask.jpg", cv2.IMREAD_GRAYSCALE)
+    img = input_mask
+    # otsu thresholding
+    _, mask = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # show
+
+    # close everything inside
+    contour, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+
+    # get the biggest contour # returns _, contours, _ if using OpenCV 3
+    biggest_area = -1
+    biggest = None
+    for con in contour:
+        area = cv2.contourArea(con)
+        if biggest_area < area:
+            biggest_area = area
+            biggest = con
+
+    # fill in the contour
+    cv2.drawContours(mask, [biggest], -1, 255, -1)
+
+    return mask
+
 def main():
     # results_folder = Path("/media/emmahaidacher/Volume/TESTS/debug_test/results")
     # cameras_folder = Path("/media/emmahaidacher/Volume/TESTS/debug_test/cameras")

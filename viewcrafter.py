@@ -226,7 +226,7 @@ class ViewCrafter:
             # save_results_seperate(batch_samples[0], self.opts.save_dir, fps=8)
             # torch.Size([1, 3, 25, 576, 1024]) [-1,1]
 
-        return torch.clamp(batch_samples[0][0].permute(1,2,3,0), -1., 1.) 
+        return torch.clamp(batch_samples[0][0].permute(1,2,3,0), -1., 1.)
 
     def complete_mask_creation(self, point_cloud, images, height, width, trajectory, no_views):
 
@@ -250,8 +250,18 @@ class ViewCrafter:
         boolean_masks = self.rendered_mask_to_binary(masked_render_results)
         visualize_masks_horizontal(boolean_masks, mask_save_dir / "bool_masks_all.png", cmap='grey')
 
+        cleaned = []
+        for i in range(boolean_masks.shape[0]):
+            single_mask = boolean_masks[i]
+            mask_np = single_mask.detach().cpu().numpy().astype(np.uint8) * 255
+            cleaned_mask = clean_mask(mask_np)
+            cleaned.append(torch.from_numpy(cleaned_mask > 127))  # threshold back to bool
+
+        cleaned_masks = torch.stack(cleaned, dim=0).to(boolean_masks.device)
+        visualize_masks_horizontal(cleaned_masks, mask_save_dir / "cleaned_masks.png", cmap='grey')
+
         # latent_masks are the boolean_masks downsampled to latent shape
-        latent_masks = self.binary_mask_to_latent(boolean_masks)
+        latent_masks = self.binary_mask_to_latent(cleaned_masks)
         visualize_masks_horizontal(latent_masks.squeeze(), mask_save_dir / "latent_masks_all.png", cmap='grey')
 
         return latent_masks
@@ -262,9 +272,11 @@ class ViewCrafter:
         mask_save_path = Path(self.opts.save_dir) / MASKS_DIR
 
         if self.mask_type in [MaskType.EASI3R_PREV, MaskType.EASI3R_FIRST]:
+            prev_mask_dir = self.base_dir / EASI3R_MASKS_INPUT_DIR / str(self.run_number - 1)
             mask_dir = self.base_dir / EASI3R_MASKS_INPUT_DIR / str(self.run_number)
+            prev_mask_folders = sorted(prev_mask_dir.iterdir())
             mask_folders = sorted(mask_dir.iterdir())
-            return load_easi3r_masks(mask_folders, current_image, H=self.opts.height // 2, W=self.opts.width // 2, output_dir=mask_save_path)
+            return load_easi3r_masks(mask_folders, prev_mask_folders, current_image, H=self.opts.height // 2, W=self.opts.width // 2, output_dir=mask_save_path)
 
         if self.mask_type == MaskType.COMP_WITH_FIRST:
             return create_frame_diff_masks(self.first_image, current_image, output_dir=mask_save_path, threshold=0.01)
