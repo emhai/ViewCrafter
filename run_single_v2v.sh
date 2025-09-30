@@ -1,6 +1,6 @@
 python inference.py \
---image_dir /media/emmahaidacher/Volume/DATASETS/MASTER_DATASETS/corgi/corgi_1/ \
---out_dir /media/emmahaidacher/Volume/GOOD_RESULTS/5_videos/ \
+--image_dir /media/emmahaidacher/Volume/DATASETS/MASTER_DATASETS/coffee_martini/coffee_1/ \
+--out_dir /media/emmahaidacher/Volume/GOOD_RESULTS/ \
 --traj_txt test/v2v_trajs/left.txt \
 --mode single_video_interp \
 --seed 123 \
@@ -13,5 +13,5 @@ python inference.py \
 --height 576 \
 --width 1024 \
 --model_path ./checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth \
---exp_name corgi_1 \
---n_frames 16
+--exp_name single_v2v_coffee_mask09 \
+--n_frames 8

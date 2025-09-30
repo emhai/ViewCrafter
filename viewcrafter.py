@@ -50,15 +50,6 @@ class ViewCrafter:
         self.opts = opts
         self.device = opts.device
 
-        if self.opts.use_mast3r:
-            print("USING MAST3R")
-            self.setup_mast3r()
-        else:
-            self.setup_dust3r()
-
-        self.setup_diffusion()
-        # initialize ref images, pcd
-
         if self.opts.mode in ['single_video_interp', 'multi_video_interp']:
 
             self.predicted_poses = None
@@ -81,9 +72,17 @@ class ViewCrafter:
 
             run_easi3r_from_viewcrafter(self.base_dir, self.opts.n_frames)
 
-            return
 
-        if not gradio:
+        if self.opts.use_mast3r:
+            print("USING MAST3R")
+            self.setup_mast3r()
+        else:
+            self.setup_dust3r()
+
+        self.setup_diffusion()
+        # initialize ref images, pcd
+
+        if not gradio or self.opts.mode not in ['single_video_interp', 'multi_video_interp']:
             if os.path.isfile(self.opts.image_dir):
                 self.images, self.img_ori = self.load_initial_images(image_dir=self.opts.image_dir)
                 self.run_dust3r(input_images=self.images)
@@ -207,7 +206,7 @@ class ViewCrafter:
             batch_samples, current_x0, intermediates = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
                                                    self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
                                                    self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-                                                   condition_index, guidance_image=self.guidance_image, latent=latent, latents=latents, mask=masks, ddim_sampler=self.ddim_sampler)
+                                                   condition_index, guidance_image=self.guidance_image, latents=latents, mask=masks, ddim_sampler=self.ddim_sampler)
 
             # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
             #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
@@ -259,6 +258,10 @@ class ViewCrafter:
 
         cleaned_masks = torch.stack(cleaned, dim=0).to(boolean_masks.device)
         visualize_masks_horizontal(cleaned_masks, mask_save_dir / "cleaned_masks.png", cmap='grey')
+
+        # float_cleaned_mask = cleaned_masks.float()
+        # float_cleaned_mask = float_cleaned_mask * 0.9
+        # visualize_masks_horizontal(float_cleaned_mask, mask_save_dir / "float_cleaned_masks.png", cmap='grey')
 
         # latent_masks are the boolean_masks downsampled to latent shape
         latent_masks = self.binary_mask_to_latent(cleaned_masks)
@@ -778,7 +781,7 @@ class ViewCrafter:
 
         print(all_frames)
         for frame in all_frames:
-            print("running frame", int(frame), "/", len(all_frames), "run_no: ", self.run_number)
+            print("running frame", int(frame) + 1, "/", len(all_frames), "run_no: ", self.run_number)
             start = time.time()
 
             current_input_dir = input_dir / frame
@@ -822,11 +825,17 @@ class ViewCrafter:
         separate_cameras(results_dir, cameras_dir, RENDER_FRAMES)
 
         setup_4dgs_from_viewcrafter(cameras_dir, self.opts.exp_name)
-        run_4dgs(self.opts.exp_name)
 
-        original_videos_4dgs = "original_" + self.opts.exp_name
-        setup_4dgs_from_videos(self.base_dir / SHORT_VIDEOS_DIR, original_videos_4dgs)
+        original_exp_name = "original_" + self.opts.exp_name
+        setup_4dgs_from_videos(self.base_dir / SHORT_VIDEOS_DIR, original_exp_name)
+
+        torch.cuda.synchronize()  # finish kernels
+        torch.cuda.empty_cache()  # release cached blocks to the driver
+        torch.cuda.ipc_collect()  # clean IPC memory
+        # del self.diffusion # todo, works?
+
         run_4dgs(self.opts.exp_name)
+        run_4dgs(original_exp_name)
 
     def setup_diffusion(self):
         seed_everything(self.opts.seed)

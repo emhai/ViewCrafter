@@ -1,7 +1,7 @@
 python inference.py \
 --image_dir /media/emmahaidacher/Volume/DATASETS/MASTER_DATASETS/coffee_martini/coffee_1/ \
 --out_dir /media/emmahaidacher/Volume/GOOD_RESULTS/5_videos/ \
---traj_txt test/v2v_trajs/espresso_loop.txt \
+--traj_txt test/v2v_trajs/left.txt \
 --mode single_video_interp \
 --seed 123 \
 --ckpt_path ./checkpoints/model_16.ckpt \
