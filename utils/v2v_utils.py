@@ -194,46 +194,6 @@ def separate_cameras(results_folder, all_cameras_folder, frame_type):
         create_video(all_frames_folder)
 
 
-def create_frame_diff_masks(current_imgs, prev_imgs, threshold=0.1, output_dir=None):
-    # creates masks of shape (1, 1, H /2, W/2) # same dim as point cloud created by dust3r
-
-    if not isinstance(current_imgs, list):
-        current_imgs = [current_imgs]
-        prev_imgs = [prev_imgs]
-
-    assert len(current_imgs) == len(prev_imgs)
-
-    all_masks = []
-
-    for i in range(len(current_imgs)):
-        image1 = current_imgs[i]
-        image2 = prev_imgs[i]
-
-        assert image1.max() <= 1.0 and image1.min() >= 0
-        assert image2.max() <= 1.0 and image2.min() >= 0
-
-        img1 = image1.permute(2, 0, 1).unsqueeze(0)  # bchw
-        img2 = image2.permute(2, 0, 1).unsqueeze(0)
-
-        abs_diff = torch.abs(img1 - img2)
-        diff_mask_pixel_space = torch.sum(abs_diff, dim=1, keepdim=True)  # Shape: [1, 1, H, W]
-
-        # Mask is 1.0 where pixels are similar, 0.0 where they are different
-        # mask_pixel_space = (diff_mask_pixel_space < threshold).float()
-
-        mask_pixel_space = (diff_mask_pixel_space > threshold).float()
-        h2, w2 = mask_pixel_space.shape[2], mask_pixel_space.shape[3]
-        mask_pixel_space_half = F.interpolate(mask_pixel_space.float(), size=(h2 // 2, w2 // 2),
-                                              mode='nearest')  # get to same dim as pc
-        print(mask_pixel_space_half.shape)
-
-        if output_dir is not None:
-            visualize_pixel_masks(mask_pixel_space_half, current_imgs[i], output_dir /f"pixel_diffs_{i}.png", "difference between first frame and current")
-
-        all_masks.append(mask_pixel_space_half.bool().squeeze())
-
-    return all_masks
-
 
 # https://learnopencv.com/simple-background-estimation-in-videos-using-opencv-c-python/
 def estimate_background(video):
@@ -280,30 +240,6 @@ def print_diffusion_model(model, max_depth=3, prefix='', depth=0):
         print_diffusion_model(child, max_depth, prefix=name + ': ', depth=depth + 1)
 
 
-def clean_mask(input_mask):
-    # load image
-    # img = cv2.imread("mask.jpg", cv2.IMREAD_GRAYSCALE)
-    img = input_mask
-    # otsu thresholding
-    _, mask = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    # show
-
-    # close everything inside
-    contour, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-
-    # get the biggest contour # returns _, contours, _ if using OpenCV 3
-    biggest_area = -1
-    biggest = None
-    for con in contour:
-        area = cv2.contourArea(con)
-        if biggest_area < area:
-            biggest_area = area
-            biggest = con
-
-    # fill in the contour
-    cv2.drawContours(mask, [biggest], -1, 255, -1)
-
-    return mask
 
 def main():
     # results_folder = Path("/media/emmahaidacher/Volume/TESTS/debug_test/results")
@@ -316,11 +252,12 @@ def main():
     # vid = "/media/emmahaidacher/Volume/DATASETS/INTERNET/espresso_short/1_video_short/0.mp4"
     # estimate_background(vid)
     # separate_cameras(results_folder, cameras_folder, DIFFUSION_FRAMES)
-    input_path = Path("/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/SelfCap/yoga3/")
-    output_path = Path("/media/emmahaidacher/Volume/TESTS/test_sep")
-    output_path.mkdir(exist_ok=True)
-    setup_structure(output_path, input_path, 16)
+    # input_path = Path("/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/SelfCap/yoga3/")
+    # output_path = Path("/media/emmahaidacher/Volume/TESTS/test_sep")
+    # output_path.mkdir(exist_ok=True)
+    # setup_structure(output_path, input_path, 16)
     # clean_empty_camera_folders()
+    clean_mask("")
 
 if __name__ == "__main__":
     main()

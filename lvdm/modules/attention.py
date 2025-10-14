@@ -68,7 +68,7 @@ class MSATracker:
             step_ok = (self.cur_step >= self.start_step)
         if not step_ok:
             return False
-        # block gate (spatial only)
+        # block gate (spatial only)<
 
         if self.layer_idx is not None:
             layer_ok = (self.cur_attn_layer // 2 >= 0) and (self.cur_attn_layer in self.layer_idx)
@@ -154,8 +154,8 @@ class CrossAttention(nn.Module):
 
         # change context for pure self-attention
         if spatial_self_attn and (self_attn_query_features_cond is not None):
-            # print("Replacing context for pure self-attention")
             context = self_attn_query_features_cond.to(q.device, dtype=q.dtype, non_blocking=True)
+            # print("Replacing context for pure self-attention")
 
         context = default(context, x)
 

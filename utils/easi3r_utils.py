@@ -1,9 +1,11 @@
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
 
 import cv2
+import numpy as np
 import torch
 from moviepy.video.io.ffmpeg_tools import ffmpeg_resize
 from torchvision.transforms import CenterCrop
@@ -137,8 +139,15 @@ def run_easi3r_from_viewcrafter(base_path, n_frames):
             print("pickle doesnt exist")
 
     easi3r_results = sorted(easi3r_results_dir.iterdir())
-    dyn_mask_folders = [folder / "frames_dynamic_masks" for folder in easi3r_results]
-    dyn_mask_files = [sorted(folder.iterdir()) for folder in dyn_mask_folders]
+
+    dyn_mask_folders = [folder / "enlarged_frames_dynamic_masks" for folder in easi3r_results]
+
+    def numeric_key(path):
+        # Extract the first integer found in the filename (e.g. 1, 2, 10, etc.)
+        match = re.search(r'\d+', path.stem)
+        return int(match.group()) if match else -1
+
+    dyn_mask_files = [sorted(folder.iterdir(), key=numeric_key) for folder in dyn_mask_folders]
 
     num_frames = len(dyn_mask_files[0])
     num_folders = len(dyn_mask_files)

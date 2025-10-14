@@ -179,8 +179,9 @@ class DDIMSampler(object):
         clean_cond = kwargs.pop("clean_cond", False)
         clean_cond = True
 
-        msa_tracker = MSATracker(start_step=4, start_layer=10)  # from MasaCtrl
-        # msa_tracker = MSATracker(start_step=0, start_layer=7) # from Pix2Video
+        # msa_tracker = MSATracker(start_step=4, start_layer=10)  # from MasaCtrl
+        msa_tracker = MSATracker(start_step=0, start_layer=7) # from Pix2Video
+        # msa_tracker = MSATracker(start_step=0, start_layer=7)
         # msa_tracker = None
 
         # cond_copy, unconditional_conditioning_copy = copy.deepcopy(cond), copy.deepcopy(unconditional_conditioning)
@@ -237,7 +238,20 @@ class DDIMSampler(object):
             is_video = False
 
         if unconditional_conditioning is None or unconditional_guidance_scale == 1.:
-            model_output = self.model.apply_model(x, t, c, **kwargs) # unet denoiser
+            if msa_tracker is None:
+                model_output = self.model.apply_model(x, t, c, **kwargs)  # unet denoiser
+            else:
+
+                sa_collect = [] if self.first_run else None
+                sa_inject = self.all_sa_collect_cond[msa_tracker.cur_step].copy() if not self.first_run else None
+                assert sa_collect is None or sa_inject is None, "cant have both"
+                msa_tracker.reset_att_layer()
+
+                model_output = self.model.apply_model(x, t, c, sa_collect=sa_collect, sa_inject=sa_inject, msa_tracker=msa_tracker, **kwargs) # unet denoiser
+
+                if self.first_run:
+                    self.all_sa_collect_cond.append(sa_collect)
+
         else:
 
             ### do_classifier_free_guidance

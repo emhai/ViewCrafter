@@ -1,5 +1,7 @@
 import sys
 
+from utils.mask_utils import create_frame_diff_masks, clean_mask
+
 sys.path.append('./extern/dust3r')
 sys.path.append('./extern/mast3r')
 
@@ -50,7 +52,8 @@ class ViewCrafter:
         self.opts = opts
         self.device = opts.device
 
-        if self.opts.mode in ['single_video_interp', 'multi_video_interp']:
+        is_master = self.opts.mode in ['single_video_interp', 'multi_video_interp']
+        if is_master:
 
             self.predicted_poses = None
             self.predicted_focals = None
@@ -82,7 +85,7 @@ class ViewCrafter:
         self.setup_diffusion()
         # initialize ref images, pcd
 
-        if not gradio or self.opts.mode not in ['single_video_interp', 'multi_video_interp']:
+        if not gradio and not is_master:
             if os.path.isfile(self.opts.image_dir):
                 self.images, self.img_ori = self.load_initial_images(image_dir=self.opts.image_dir)
                 self.run_dust3r(input_images=self.images)
@@ -120,7 +123,6 @@ class ViewCrafter:
         else:
             self.scene = scene
 
-
     def render_pcd(self, pts3d ,imgs, masks, views, renderer, device,nbv=False):
         
         imgs = to_numpy(imgs)
@@ -149,7 +151,7 @@ class ViewCrafter:
     def run_render(self, pcd, imgs, masks, H, W, camera_traj,num_views,nbv=False):
         render_setup = setup_renderer(camera_traj, image_size=(H,W))
         renderer = render_setup['renderer']
-        render_results, viewmask = self.render_pcd(pcd, imgs, masks, num_views,renderer,self.device,nbv=False)
+        render_results, viewmask = self.render_pcd(pcd, imgs, masks, num_views,renderer, self.device,nbv=False)
         return render_results, viewmask
 
     
@@ -206,7 +208,7 @@ class ViewCrafter:
             batch_samples, current_x0, intermediates = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
                                                    self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
                                                    self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-                                                   condition_index, guidance_image=self.guidance_image, latents=latents, mask=masks, ddim_sampler=self.ddim_sampler)
+                                                   condition_index, guidance_image=None, latents=None, mask=None, ddim_sampler=self.ddim_sampler)
 
             # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
             #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
@@ -832,7 +834,7 @@ class ViewCrafter:
         torch.cuda.synchronize()  # finish kernels
         torch.cuda.empty_cache()  # release cached blocks to the driver
         torch.cuda.ipc_collect()  # clean IPC memory
-        # del self.diffusion # todo, works?
+        del self.diffusion # todo, works?
 
         run_4dgs(self.opts.exp_name)
         run_4dgs(original_exp_name)
