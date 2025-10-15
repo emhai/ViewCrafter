@@ -3,6 +3,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 from utils.visualization_utils import visualize_pixel_masks
 
@@ -50,8 +51,11 @@ def create_frame_diff_masks(current_imgs, prev_imgs, threshold=0.1, output_dir=N
 def clean_mask(input_mask):
 
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
+
     closing = cv2.morphologyEx(input_mask, cv2.MORPH_CLOSE, kernel)
-    filled = cv2.medianBlur(closing, 7)
+    dilation = cv2.dilate(closing, kernel, iterations=1)
+    filled = cv2.medianBlur(dilation, 7)
+
 
     return filled
 

@@ -102,6 +102,7 @@ class ViewCrafter:
         mode = GlobalAlignerMode.PointCloudOptimizer #if len(self.images) > 2 else GlobalAlignerMode.PairViewer
         scene = global_aligner(output, device=self.device, mode=mode)
 
+        self.predicted_poses = None
         if self.predicted_poses is not None:
             print("Found predicted camera poses")
             scene.preset_pose(self.predicted_poses)
@@ -208,7 +209,7 @@ class ViewCrafter:
             batch_samples, current_x0, intermediates = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
                                                    self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
                                                    self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-                                                   condition_index, guidance_image=None, latents=None, mask=None, ddim_sampler=self.ddim_sampler)
+                                                   condition_index, guidance_image=None, latent=latent, latents=None, mask=masks, ddim_sampler=self.ddim_sampler)
 
             # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
             #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
@@ -258,7 +259,7 @@ class ViewCrafter:
             cleaned_mask = clean_mask(mask_np)
             cleaned.append(torch.from_numpy(cleaned_mask > 127))  # threshold back to bool
 
-        cleaned_masks = torch.stack(cleaned, dim=0).to(boolean_masks.device)
+        cleaned_masks = torch.stack(cleaned, dim=0).to(self.device)
         visualize_masks_horizontal(cleaned_masks, mask_save_dir / "cleaned_masks.png", cmap='grey')
 
         # float_cleaned_mask = cleaned_masks.float()
@@ -268,6 +269,7 @@ class ViewCrafter:
         # latent_masks are the boolean_masks downsampled to latent shape
         latent_masks = self.binary_mask_to_latent(cleaned_masks)
         visualize_masks_horizontal(latent_masks.squeeze(), mask_save_dir / "latent_masks_all.png", cmap='grey')
+
 
         return latent_masks
 
@@ -373,9 +375,8 @@ class ViewCrafter:
 
         return diffusion_results
 
-    def nvs_single_view_v2v(self, gradio=False):
-        # 最后一个view为 0 pose
-        # todo cleanup
+    def get_pickle_vals(self):
+
         t_shape = self.images[0]['true_shape']
         t_H, t_W = int(t_shape[0][0]), int(t_shape[0][1])
 
@@ -383,11 +384,13 @@ class ViewCrafter:
         pickle_file = list(pickle_dir.rglob("*.pkl"))[0]
         with open(pickle_file, 'rb') as f:
             pickle_im_poses = pickle.load(f)
-            pickle_im_poses = pickle_im_poses[self.run_number].unsqueeze(0)
+            pickle_im_poses = pickle_im_poses[self.run_numbery].unsqueeze(0)
 
             pickle_principal_points = pickle.load(f)
-            pickle_principal_points = pickle_principal_points[self.run_number].unsqueeze(0) # wrong pp from easi3r since resolution is different
-            pickle_principal_points = torch.tensor([[t_W // 2., t_H // 2.]], dtype=torch.float32, device=self.device) # todo, always right?
+            pickle_principal_points = pickle_principal_points[self.run_number].unsqueeze(
+                0)  # wrong pp from easi3r since resolution is different
+            pickle_principal_points = torch.tensor([[t_W // 2., t_H // 2.]], dtype=torch.float32,
+                                                   device=self.device)  # todo, always right?
 
             pickle_focals = pickle.load(f)
             pickle_focals = pickle_focals[self.run_number].unsqueeze(0)
@@ -395,10 +398,10 @@ class ViewCrafter:
             crop = CenterCrop((t_H, t_W))
 
             pickle_pts3d = pickle.load(f)
-            pickle_pts3d = pickle_pts3d[self.run_number] # H, W, C
-            pickle_pts3d = pickle_pts3d.permute(2, 0, 1) # C, H, W
+            pickle_pts3d = pickle_pts3d[self.run_number]  # H, W, C
+            pickle_pts3d = pickle_pts3d.permute(2, 0, 1)  # C, H, W
             pickle_pts3d = crop(pickle_pts3d)
-            pickle_pts3d = pickle_pts3d.permute(1, 2, 0) # H, W, C
+            pickle_pts3d = pickle_pts3d.permute(1, 2, 0)  # H, W, C
 
             pickle_depths = pickle.load(f)
             pickle_depths = pickle_depths[self.run_number]
@@ -412,25 +415,48 @@ class ViewCrafter:
             pickle_imgs_tensor = pickle_imgs_tensor.permute(1, 2, 0)
             pickle_imgs = pickle_imgs_tensor.numpy()
 
+        return pickle_imgs, pickle_im_poses, pickle_principal_points, pickle_focals, pickle_pts3d, pickle_depths
 
-        shape = pickle_imgs.shape
-        H, W = int(shape[0]), int(shape[1])
+    def nvs_single_view_v2v(self, gradio=False):
+        # 最后一个view为 0 pose
+        # todo cleanup
 
-        c2ws = pickle_im_poses
-        principal_points = pickle_principal_points
-        focals = pickle_focals
+        if self.opts.use_easi3r:
+            print("Using Easi3r for PC")
+            pickle_imgs, c2ws, principal_points, focals, pickle_pts3d, pickle_depths = self.get_pickle_vals()
 
-        pcd = [pickle_pts3d, pickle_pts3d] # emulate result from original VC-run
-        depth = [pickle_depths, pickle_depths]
+            shape = pickle_imgs.shape
+            H, W = int(shape[0]), int(shape[1])
 
-        depth_avg = depth[-1][H // 2, W // 2]  # 以图像中心处的depth(z)为球心旋转
-        radius = depth_avg * self.opts.center_scale  # 缩放调整
+            pcd = [pickle_pts3d, pickle_pts3d]  # emulate result from original VC-run
+            depth = [pickle_depths, pickle_depths]
 
-        ## change coordinate
-        c2ws, pcd = world_point_to_obj(poses=c2ws, points=torch.stack(pcd), k=-1, r=radius,
-                                       elevation=self.opts.elevation, device=self.device)
+            depth_avg = depth[-1][H // 2, W // 2]  # 以图像中心处的depth(z)为球心旋转
+            radius = depth_avg * self.opts.center_scale  # 缩放调整
 
-        imgs = np.array([pickle_imgs, pickle_imgs])
+            ## change coordinate
+            c2ws, pcd = world_point_to_obj(poses=c2ws, points=torch.stack(pcd), k=-1, r=radius,
+                                           elevation=self.opts.elevation, device=self.device)
+
+            imgs = np.array([pickle_imgs, pickle_imgs])
+        else:
+            print("Using dust3r for PC")
+            c2ws = self.scene.get_im_poses().detach()[1:]
+            principal_points = self.scene.get_principal_points().detach()[1:]  # cx cy
+            focals = self.scene.get_focals().detach()[1:]
+            shape = self.images[0]['true_shape']
+            H, W = int(shape[0][0]), int(shape[0][1])
+            pcd = [i.detach() for i in
+                   self.scene.get_pts3d(clip_thred=self.opts.dpt_trd)]  # a list of points of size whc
+            depth = [i.detach() for i in self.scene.get_depthmaps()]
+            depth_avg = depth[-1][H // 2, W // 2]  # 以图像中心处的depth(z)为球心旋转
+            radius = depth_avg * self.opts.center_scale  # 缩放调整
+
+            ## change coordinate
+            c2ws, pcd = world_point_to_obj(poses=c2ws, points=torch.stack(pcd), k=-1, r=radius,
+                                           elevation=self.opts.elevation, device=self.device)
+            imgs = np.array(self.scene.imgs)
+
 
         masks = None
 
@@ -799,7 +825,9 @@ class ViewCrafter:
 
             if mode == "single":
                 self.images, self.img_ori = self.load_initial_images(image_dir=self.opts.image_dir)
-                # self.run_dust3r(input_images=self.images)
+                if not self.opts.use_easi3r:
+                    self.run_dust3r(input_images=self.images)
+
             else: # mode == "multi"
                 self.images, self.img_ori = self.load_initial_dir(image_dir=self.opts.image_dir)
                 self.run_dust3r(input_images=self.images, clean_pc=True) # if single, pc is from easi3r

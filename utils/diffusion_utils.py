@@ -174,9 +174,15 @@ def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddi
         if mask is not None and latents is not None:
             cond_mask = mask.clone()
             conds_z0 = latents
+            x0 = None
+        elif mask is not None and latent is not None:
+            cond_mask = mask.clone()
+            conds_z0 = None
+            x0 = latent
         else:
             cond_mask = None
             conds_z0 = None
+            x0 = None
 
         if ddim_sampler is not None:
 
@@ -190,7 +196,7 @@ def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddi
                                             eta=ddim_eta,
                                             cfg_img=cfg_img, 
                                             mask=cond_mask,
-                                            x0=None, # previous latent at t0
+                                            x0=x0, # previous latent at t0
                                             conds_z0=conds_z0, # all previous latents
                                             fs=fs,
                                             timestep_spacing=timestep_spacing,
