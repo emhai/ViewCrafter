@@ -102,7 +102,6 @@ class ViewCrafter:
         mode = GlobalAlignerMode.PointCloudOptimizer #if len(self.images) > 2 else GlobalAlignerMode.PairViewer
         scene = global_aligner(output, device=self.device, mode=mode)
 
-        self.predicted_poses = None
         if self.predicted_poses is not None:
             print("Found predicted camera poses")
             scene.preset_pose(self.predicted_poses)
@@ -209,7 +208,7 @@ class ViewCrafter:
             batch_samples, current_x0, intermediates = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
                                                    self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
                                                    self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-                                                   condition_index, guidance_image=None, latent=latent, latents=None, mask=masks, ddim_sampler=self.ddim_sampler)
+                                                   condition_index, guidance_image=None, latent=None, latents=latents, mask=masks, ddim_sampler=self.ddim_sampler)
 
             # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
             #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
@@ -384,11 +383,10 @@ class ViewCrafter:
         pickle_file = list(pickle_dir.rglob("*.pkl"))[0]
         with open(pickle_file, 'rb') as f:
             pickle_im_poses = pickle.load(f)
-            pickle_im_poses = pickle_im_poses[self.run_numbery].unsqueeze(0)
+            pickle_im_poses = pickle_im_poses[self.run_number].unsqueeze(0)
 
             pickle_principal_points = pickle.load(f)
-            pickle_principal_points = pickle_principal_points[self.run_number].unsqueeze(
-                0)  # wrong pp from easi3r since resolution is different
+            pickle_principal_points = pickle_principal_points[self.run_number].unsqueeze(0)  # wrong pp from easi3r since resolution is different
             pickle_principal_points = torch.tensor([[t_W // 2., t_H // 2.]], dtype=torch.float32,
                                                    device=self.device)  # todo, always right?
 
@@ -432,11 +430,6 @@ class ViewCrafter:
             depth = [pickle_depths, pickle_depths]
 
             depth_avg = depth[-1][H // 2, W // 2]  # 以图像中心处的depth(z)为球心旋转
-            radius = depth_avg * self.opts.center_scale  # 缩放调整
-
-            ## change coordinate
-            c2ws, pcd = world_point_to_obj(poses=c2ws, points=torch.stack(pcd), k=-1, r=radius,
-                                           elevation=self.opts.elevation, device=self.device)
 
             imgs = np.array([pickle_imgs, pickle_imgs])
         else:

@@ -256,8 +256,8 @@ def main():
     # output_path = Path("/media/emmahaidacher/Volume/TESTS/test_sep")
     # output_path.mkdir(exist_ok=True)
     # setup_structure(output_path, input_path, 16)
-    # clean_empty_camera_folders()
-    clean_mask("")
+    clean_empty_camera_folders()
+    # clean_mask("")
 
 if __name__ == "__main__":
     main()

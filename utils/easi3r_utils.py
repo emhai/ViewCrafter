@@ -140,7 +140,7 @@ def run_easi3r_from_viewcrafter(base_path, n_frames):
 
     easi3r_results = sorted(easi3r_results_dir.iterdir())
 
-    dyn_mask_folders = [folder / "enlarged_frames_dynamic_masks" for folder in easi3r_results]
+    dyn_mask_folders = [folder / "frames_dynamic_masks" for folder in easi3r_results]
 
     def numeric_key(path):
         # Extract the first integer found in the filename (e.g. 1, 2, 10, etc.)
