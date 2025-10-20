@@ -67,6 +67,7 @@ class ViewCrafter:
             self.run_number = 0
             self.mask_type = MaskType.EASI3R_PREV
             self.ddim_sampler = None
+            self.radius = None
 
             assert os.path.isdir(self.opts.image_dir)
 
@@ -208,7 +209,7 @@ class ViewCrafter:
             batch_samples, current_x0, intermediates = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
                                                    self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
                                                    self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-                                                   condition_index, guidance_image=None, latent=None, latents=latents, mask=masks, ddim_sampler=self.ddim_sampler)
+                                                   condition_index, guidance_image=self.guidance_image, latent=None, latents=latents, mask=masks, ddim_sampler=self.ddim_sampler)
 
             # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
             #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
@@ -430,7 +431,12 @@ class ViewCrafter:
             depth = [pickle_depths, pickle_depths]
 
             depth_avg = depth[-1][H // 2, W // 2]  # 以图像中心处的depth(z)为球心旋转
+            if self.radius is None:
+                self.radius = depth_avg * self.opts.center_scale  # 缩放调整
 
+            ## change coordinate
+            c2ws, pcd = world_point_to_obj(poses=c2ws, points=torch.stack(pcd), k=0, r=self.radius,
+                                           elevation=self.opts.elevation, device=self.device)
             imgs = np.array([pickle_imgs, pickle_imgs])
         else:
             print("Using dust3r for PC")
@@ -877,7 +883,7 @@ class ViewCrafter:
         model.eval()
         self.diffusion = model
 
-        print_diffusion_model(model, max_depth=7)
+        # print_diffusion_model(model, max_depth=7)
 
         h, w = self.opts.height // 8, self.opts.width // 8 # latent size
         channels = model.model.diffusion_model.out_channels

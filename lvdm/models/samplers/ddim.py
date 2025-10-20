@@ -179,8 +179,8 @@ class DDIMSampler(object):
         # clean_cond = kwargs.pop("clean_cond", False)
         clean_cond = (conds_z0 is not None)
 
-        # msa_tracker = MSATracker(start_step=4, start_layer=10)  # from MasaCtrl
-        msa_tracker = MSATracker(start_step=0, start_layer=7) # from Pix2Video
+        msa_tracker = MSATracker(start_step=4, start_layer=10)  # from MasaCtrl
+        # msa_tracker = MSATracker(start_step=0, start_layer=7) # from Pix2Video
         # msa_tracker = MSATracker(start_step=0, start_layer=7)
         # msa_tracker = None
 
@@ -198,10 +198,10 @@ class DDIMSampler(object):
             if mask is not None:
 
                 if clean_cond:
-                    print("using corresponding latent at each step")
+                    # print("using corresponding latent at each step")
                     img_orig = conds_z0[i]
                 else:
-                    print("using x0 with q_sample")
+                    # print("using x0 with q_sample")
                     img_orig = self.model.q_sample(x0, ts)  # TODO: deterministic forward pass? <ddim inversion>
                 # img = img_orig * mask + (1. - mask) * img # keep original & modify use img
                 img = img_orig * (1. - mask) + mask * img # keep original & modify use img swapped
