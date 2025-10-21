@@ -41,7 +41,7 @@ from lvdm.models.samplers.ddim import DDIMSampler
 from lvdm.models.samplers.ddim_multiplecond import DDIMSampler as DDIMSampler_multicond
 from omegaconf import OmegaConf
 from pytorch_lightning import seed_everything
-from utils.diffusion_utils import instantiate_from_config,load_model_checkpoint,image_guided_synthesis
+from utils.diffusion_utils import instantiate_from_config, load_model_checkpoint, image_guided_synthesis, get_latent_z
 from pathlib import Path
 from torchvision.utils import save_image
 import time
@@ -68,6 +68,8 @@ class ViewCrafter:
             self.mask_type = MaskType.EASI3R_PREV
             self.ddim_sampler = None
             self.radius = None
+            self.x_T = None
+            self.last_pc = None
 
             assert os.path.isdir(self.opts.image_dir)
 
@@ -209,7 +211,8 @@ class ViewCrafter:
             batch_samples, current_x0, intermediates = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
                                                    self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
                                                    self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-                                                   condition_index, guidance_image=self.guidance_image, latent=None, latents=latents, mask=masks, ddim_sampler=self.ddim_sampler)
+                                                   condition_index, guidance_image=None, latent=None, latents=None, mask=None, x_T=self.x_T,
+                                                                              ddim_sampler=self.ddim_sampler)
 
             # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
             #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
@@ -220,10 +223,42 @@ class ViewCrafter:
             if self.run_number == 0:
                 self.first_latent = current_x0
                 self.first_latents = intermediates
+                x_T = intermediates['x_inter'][-1]
+
+                # Create conditioning with ZERO point cloud (or minimal/blurred version)
+                zero_pointcloud = torch.full_like(x_T, 0)
+                z = get_latent_z(self.diffusion, videos)  # b c t h w
+                # if loop or interp:
+                #     img_cat_cond = torch.zeros_like(z)
+                #     img_cat_cond[:,:,0,:,:] = z[:,:,0,:,:]
+                #     img_cat_cond[:,:,-1,:,:] = z[:,:,-1,:,:]
+                # else:
+                img_cat_cond = z
+                img_emb = self.diffusion.embedder(self.guidance_image)  ## blc
+                img_emb = self.diffusion.image_proj_model(img_emb)
+
+                cond_emb = self.diffusion.get_learned_conditioning(prompts)
+                cond_run0_nulltext = {
+                    "c_crossattn": [torch.cat([cond_emb, img_emb], dim=1)],
+                    # since prompt and guidance_img same -- reuse
+                    "c_concat": [img_cat_cond]  # Use zero/null point cloud for inversion
+                }
+
+                inverted_noise_run0, _ = self.ddim_sampler.ddim_inversion(
+                    x0=x_T,
+                    cond=cond_run0_nulltext,  # Invert with null point cloud
+                    ddim_steps=50,
+                    ddim_eta=0.0,
+                    unconditional_guidance_scale=1.0,
+                )
+                self.x_T = inverted_noise_run0
+
+
 
             self.prev_latent = current_x0
             self.prev_latents = intermediates
             self.ddim_sampler.first_run = False
+
 
             # save_results_seperate(batch_samples[0], self.opts.save_dir, fps=8)
             # torch.Size([1, 3, 25, 576, 1024]) [-1,1]
@@ -250,7 +285,7 @@ class ViewCrafter:
 
         # boolean_masks are the masked_render_results, thresholded to [0, 1]
         boolean_masks = self.rendered_mask_to_binary(masked_render_results)
-        visualize_masks_horizontal(boolean_masks, mask_save_dir / "bool_masks_all.png", cmap='grey')
+        visualize_masks_horizontal(boolean_masks, mask_save_dir / "bool_masks_all.png", cmap='Greys')
 
         cleaned = []
         for i in range(boolean_masks.shape[0]):
@@ -260,7 +295,7 @@ class ViewCrafter:
             cleaned.append(torch.from_numpy(cleaned_mask > 127))  # threshold back to bool
 
         cleaned_masks = torch.stack(cleaned, dim=0).to(self.device)
-        visualize_masks_horizontal(cleaned_masks, mask_save_dir / "cleaned_masks.png", cmap='grey')
+        visualize_masks_horizontal(cleaned_masks, mask_save_dir / "cleaned_masks.png", cmap='Greys')
 
         # float_cleaned_mask = cleaned_masks.float()
         # float_cleaned_mask = float_cleaned_mask * 0.9
@@ -268,7 +303,7 @@ class ViewCrafter:
 
         # latent_masks are the boolean_masks downsampled to latent shape
         latent_masks = self.binary_mask_to_latent(cleaned_masks)
-        visualize_masks_horizontal(latent_masks.squeeze(), mask_save_dir / "latent_masks_all.png", cmap='grey')
+        visualize_masks_horizontal(latent_masks.squeeze(), mask_save_dir / "latent_masks_all.png", cmap='Greys')
 
 
         return latent_masks
@@ -521,7 +556,7 @@ class ViewCrafter:
         diffusion_results = self.run_diffusion(render_results, latent_masks)
         save_video((diffusion_results + 1.0) / 2.0, os.path.join(self.opts.save_dir, 'diffusion.mp4'),
                    os.path.join(self.opts.save_dir, DIFFUSION_FRAMES))
-
+        self.last_pc = pcd
         return diffusion_results
 
     def nvs_sparse_view(self,iter):
@@ -875,6 +910,7 @@ class ViewCrafter:
         ## set use_checkpoint as False as when using deepspeed, it encounters an error "deepspeed backend not set"
         model_config['params']['unet_config']['params']['use_checkpoint'] = False
         model = instantiate_from_config(model_config)
+        print("instantiating: ", model_config)
         model = model.to(self.device)
         model.cond_stage_model.device = self.device
         model.perframe_ae = self.opts.perframe_ae

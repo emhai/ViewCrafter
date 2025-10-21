@@ -21,6 +21,8 @@ def run_command(cmd):
     if proc.stderr:
         print(">> stderr:\n", proc.stderr)
 
+    return proc.returncode == 0
+
 def run_4dgs(exp_name):
 
     # From https://github.com/hustvl/4DGaussians
@@ -45,22 +47,22 @@ def run_4dgs(exp_name):
     # DATA PREPARATION
     print(">> DATA PREPARATION")
     cmd = f'conda run -n Gaussians4D bash multipleviewprogress.sh {exp_name}'
-    run_command(cmd)
+    if not run_command(cmd): return
 
     # TRAINING
     print(">> TRAINING")
     cmd = f'conda run -n Gaussians4D python train.py -s  data/multipleview/{exp_name} --port 6017 --expname "multipleview/{exp_name}" --configs arguments/multipleview/default.py'
-    run_command(cmd)
+    if not run_command(cmd): return
 
     # RENDERING
     print(">> RENDERING")
     cmd = f'conda run -n Gaussians4D python render.py --model_path "output/multipleview/{exp_name}"  --skip_train --configs arguments/multipleview/default.py'
-    run_command(cmd)
+    if not run_command(cmd): return
 
     # EVALUATION
     print(">> EVALUATION")
     cmd = f'conda run -n Gaussians4D python metrics.py --model_path "output/multipleview/{exp_name}"'
-    run_command(cmd)
+    if not run_command(cmd): return
 
     print(">> 4DGS END")
 

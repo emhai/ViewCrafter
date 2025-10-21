@@ -66,6 +66,129 @@ class DDIMSampler(object):
         self.register_buffer('ddim_sigmas_for_original_num_steps', sigmas_for_original_sampling_steps)
 
     @torch.no_grad()
+    def ddim_inversion(self,
+                       x0,
+                       cond,
+                       ddim_steps=50,
+                       verbose=True,
+                       ddim_eta=0.0,
+                       unconditional_conditioning=None,
+                       unconditional_guidance_scale=1.0,
+                       **kwargs):
+        """
+        DDIM Inversion: converts generated latents x0 back to noise x_T
+
+        Args:
+            x0: Clean latent frames from run 0 [B, C, T, H, W]
+            cond: Conditioning dict with c_crossattn and c_concat from run 0
+            ddim_steps: Number of inversion steps (should match generation)
+            verbose: Show progress bar
+            ddim_eta: Should be 0.0 for deterministic inversion
+            unconditional_conditioning: For CFG during inversion (if used)
+            unconditional_guidance_scale: CFG scale during inversion
+
+        Returns:
+            x_T: Inverted noise at timestep T
+            intermediates: Dict with intermediate latents
+        """
+        # Make schedule for inversion
+        self.make_schedule(ddim_num_steps=ddim_steps, ddim_discretize='uniform',
+                           ddim_eta=ddim_eta, verbose=False)
+
+        device = x0.device
+        b = x0.shape[0]
+        is_video = (x0.dim() == 5)
+
+        # Start from clean latents (t=0)
+        x_t = x0.clone()
+
+        # Inversion goes forward in time: t=0 -> t=T
+        # So we need to reverse the timesteps
+        timesteps = self.ddim_timesteps
+        time_range = timesteps  # Already in ascending order for inversion
+        total_steps = timesteps.shape[0]
+
+        if verbose:
+            iterator = tqdm(time_range, desc='DDIM Inversion', total=total_steps)
+        else:
+            iterator = time_range
+
+        intermediates = {'x_inter': [x_t.clone()]}
+
+        for i, step in enumerate(iterator):
+            index = i  # For inversion, we go forward through indices
+            ts = torch.full((b,), step, device=device, dtype=torch.long)
+
+            # Predict noise at current timestep
+            if unconditional_conditioning is None or unconditional_guidance_scale == 1.:
+                model_output = self.model.apply_model(x_t, ts, cond, **kwargs)
+            else:
+                # Apply CFG during inversion (if you used it during generation)
+                e_t_cond = self.model.apply_model(x_t, ts, cond, **kwargs)
+                e_t_uncond = self.model.apply_model(x_t, ts, unconditional_conditioning, **kwargs)
+                model_output = e_t_uncond + unconditional_guidance_scale * (e_t_cond - e_t_uncond)
+
+            # Convert to noise prediction if using v-parameterization
+            if self.model.parameterization == "v":
+                e_t = self.model.predict_eps_from_z_and_v(x_t, ts, model_output)
+            else:
+                e_t = model_output
+
+            # Get alpha values for inversion step
+            alphas = self.ddim_alphas
+            alphas_prev = self.ddim_alphas_prev
+            sqrt_one_minus_alphas = self.ddim_sqrt_one_minus_alphas
+
+            if is_video:
+                size = (b, 1, 1, 1, 1)
+            else:
+                size = (b, 1, 1, 1)
+
+            # For inversion, we go from t to t+1
+            # So we swap the roles of alpha_t and alpha_prev
+            if i < total_steps - 1:
+                # Current timestep (lower noise)
+                a_t = torch.full(size, alphas[index], device=device)
+                sqrt_one_minus_at = torch.full(size, sqrt_one_minus_alphas[index], device=device)
+
+                # Next timestep (higher noise)
+                a_next = torch.full(size, alphas[index + 1], device=device)
+                sqrt_one_minus_a_next = torch.full(size, sqrt_one_minus_alphas[index + 1], device=device)
+            else:
+                # Last step: go to pure noise
+                a_t = torch.full(size, alphas[index], device=device)
+                sqrt_one_minus_at = torch.full(size, sqrt_one_minus_alphas[index], device=device)
+                a_next = torch.full(size, 0.0, device=device)  # Pure noise
+                sqrt_one_minus_a_next = torch.full(size, 1.0, device=device)
+
+            # Predict x0 from current x_t
+            pred_x0 = (x_t - sqrt_one_minus_at * e_t) / a_t.sqrt()
+
+            # Apply dynamic rescale if used
+            if self.model.use_dynamic_rescale:
+                scale_t = torch.full(size, self.ddim_scale_arr[index], device=device)
+                if i < total_steps - 1:
+                    next_scale_t = torch.full(size, self.ddim_scale_arr[index + 1], device=device)
+                else:
+                    next_scale_t = torch.full(size, 1.0, device=device)
+                rescale = next_scale_t / scale_t
+                pred_x0 *= rescale
+
+            # DDIM inversion step: compute x_{t+1} (adding noise)
+            # x_{t+1} = sqrt(alpha_{t+1}) * pred_x0 + sqrt(1 - alpha_{t+1}) * e_t
+            if i < total_steps - 1:
+                dir_xt = sqrt_one_minus_a_next * e_t
+                x_t = a_next.sqrt() * pred_x0 + dir_xt
+            else:
+                # Last step: pure noise
+                x_t = sqrt_one_minus_a_next * e_t
+
+            if i % 10 == 0 or i == total_steps - 1:
+                intermediates['x_inter'].append(x_t.clone())
+
+        return x_t, intermediates
+
+    @torch.no_grad()
     def sample(self,
                S,
                batch_size,
@@ -157,6 +280,7 @@ class DDIMSampler(object):
             img = torch.randn(shape, device=device)
             # todo here ddim inversion noise
         else:
+            img2 = torch.randn(shape, device=device)
             img = x_T
         if precision is not None:
             if precision == 16:
@@ -179,10 +303,10 @@ class DDIMSampler(object):
         # clean_cond = kwargs.pop("clean_cond", False)
         clean_cond = (conds_z0 is not None)
 
-        msa_tracker = MSATracker(start_step=4, start_layer=10)  # from MasaCtrl
+        # msa_tracker = MSATracker(start_step=4, start_layer=10)  # from MasaCtrl
         # msa_tracker = MSATracker(start_step=0, start_layer=7) # from Pix2Video
         # msa_tracker = MSATracker(start_step=0, start_layer=7)
-        # msa_tracker = None
+        msa_tracker = None
 
         # cond_copy, unconditional_conditioning_copy = copy.deepcopy(cond), copy.deepcopy(unconditional_conditioning)
         for i, step in enumerate(iterator):

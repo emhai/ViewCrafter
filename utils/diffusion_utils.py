@@ -6,6 +6,24 @@ import torch.distributed as dist
 from collections import OrderedDict
 import os
 from einops import rearrange, repeat
+import torch.nn.functional as F
+
+def _lowpass_3d_like(x):
+    """
+    Heavy low-pass filter over (T,H,W) while preserving shape.
+    x: [B, C, T, H, W]
+    """
+    B, C, T, H, W = x.shape
+    k_t = max(1, min(T, 5))  # short temporal blur to preserve schedule alignment
+    # choose odd kernels; clamp to frame size
+    def odd_leq(n, prefer=31):
+        k = min(prefer, n) if n > 0 else 1
+        if k % 2 == 0: k -= 1
+        return max(k, 1)
+    k_xy = odd_leq(min(H, W), prefer=31)
+    pad = (k_t // 2, k_xy // 2, k_xy // 2)  # (t, h, w)
+    # avg_pool3d supports padding in F.* API
+    return F.avg_pool3d(x, kernel_size=(k_t, k_xy, k_xy), stride=1, padding=pad)
 
 def count_params(model, verbose=False):
     total_params = sum(p.numel() for p in model.parameters())
@@ -115,7 +133,7 @@ def get_latent_z(model, videos):
 def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddim_steps=50, ddim_eta=1.,
                            unconditional_guidance_scale=1.0, cfg_img=None, fs=None, text_input=False, multiple_cond_cfg=False,
                            timestep_spacing='uniform', guidance_rescale=0.0, condition_index=None, guidance_image=None,
-                           latent=None, latents=None, mask=None, ddim_sampler=None, **kwargs):
+                           latent=None, latents=None, mask=None, x_T=None, last_pc=None, ddim_sampler=None, **kwargs):
 
     batch_size = noise_shape[0]
     fs = torch.tensor([fs] * batch_size, dtype=torch.long, device=model.device)
@@ -202,6 +220,7 @@ def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddi
                                             timestep_spacing=timestep_spacing,
                                             guidance_rescale=guidance_rescale,
                                             log_every_t=1, # log every intermediate latent
+                                            x_T=x_T,
                                             **kwargs
                                             )
 

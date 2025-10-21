@@ -242,8 +242,8 @@ def print_diffusion_model(model, max_depth=3, prefix='', depth=0):
 
 
 def main():
-    results_folder = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/20251020_1352_yoga_debug/results")
-    cameras_folder = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/20251020_1352_yoga_debug/cameras")
+    results_folder = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/20251020_1740_yoga_debug/results")
+    cameras_folder = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/20251020_1740_yoga_debug/cameras")
     # input_vid = "/home/emmahaidacher/Masterthesis/MasterThesis/noisy_espresso_video/test.mp4"
     # output_folder = "/home/emmahaidacher/Masterthesis/MasterThesis/noisy_espresso_video/frames"
     # extract_frames(input_vid, output_folder)
@@ -251,7 +251,9 @@ def main():
     # img2 = "/media/emmahaidacher/Volume/GOOD_RESULTS/espresso_1cam_16frames_pickle_deflick_reuse_latent_alpha8/camera_frames/0/00002.png"
     # vid = "/media/emmahaidacher/Volume/DATASETS/INTERNET/espresso_short/1_video_short/0.mp4"
     # estimate_background(vid)
+    separate_cameras(results_folder, cameras_folder, DIFFUSION_FRAMES)
     separate_cameras(results_folder, cameras_folder, RENDER_FRAMES)
+
     # input_path = Path("/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/SelfCap/yoga3/")
     # output_path = Path("/media/emmahaidacher/Volume/TESTS/test_sep")
     # output_path.mkdir(exist_ok=True)
