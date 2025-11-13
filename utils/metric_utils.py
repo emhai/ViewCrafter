@@ -6,9 +6,17 @@ from skimage.metrics import structural_similarity
 from math import log10, sqrt
 import cv2
 import numpy as np
+from pytorch_fid.fid_score import calculate_fid_given_paths
 
 import lpips
+from cdfvd import fvd
+from fvmd import fvmd
 
+""" 
+==============================================
+=================== IMAGES ===================
+==============================================
+"""
 # https://www.geeksforgeeks.org/python-peak-signal-to-noise-ratio-psnr/
 def PSNR(original_path, synthesized_path):
 
@@ -41,10 +49,12 @@ def SSIM(original_path, synthesized_path):
 def LPIPS(original_path, synthesized_path):
 
     spatial = True         # Return a spatial map of perceptual distance.
-    loss_fn = lpips.LPIPS(net='alex', spatial=spatial, verbose=False)  # Can also set net = 'squeeze' or 'vgg'
+    loss_fn = lpips.LPIPS(net='alex', spatial=spatial, verbose=False).cuda()  # Can also set net = 'squeeze' or 'vgg'
 
     original = lpips.im2tensor(lpips.load_image(original_path))
+    original = original.cuda()
     synthesized = lpips.im2tensor(lpips.load_image(synthesized_path))
+    synthesized = synthesized.cuda()
 
     d = loss_fn.forward(original, synthesized)
 
@@ -56,6 +66,61 @@ def LPIPS(original_path, synthesized_path):
         # Visualize a spatially-varying distance map between ex_p0 and ex_ref
         # pylab.imshow(d[0, 0, ...].data.cpu().numpy())
         # pylab.show()
+
+# https://github.com/mseitzer/pytorch-fid
+def FID(original_path, synthesized_path):
+    # requires full paths
+    paths = [original_path, synthesized_path]
+    fid_value = calculate_fid_given_paths(
+        paths,
+        batch_size=50,
+        device="cuda", #todo cuda:0?
+        dims=2048,
+    )
+    return fid_value
+
+""" 
+==============================================
+=================== VIDEOS ===================
+==============================================
+"""
+
+# https://content-debiased-fvd.github.io/documentation/
+# https://github.com/songweige/content-debiased-fvd
+def FVD(original_path, synthesized_path):
+    evaluator = fvd.cdfvd('videomae', ckpt_path=None, device='cuda')
+
+    evaluator.compute_real_stats(evaluator.load_videos(original_path))
+    evaluator.compute_fake_stats(evaluator.load_videos(synthesized_path))
+    score = evaluator.compute_fvd_from_stats()
+
+    return score
+
+def FVMD(original_path, synthesized_path, log_path):
+    #Folder/
+    #|-- Clip1/
+    #|   |-- Frame1.png/jpg
+    #|   |-- Frame2.png/jpg
+    #|   |-- ...
+    #|
+    #|-- Clip2/
+    #|   |-- Frame1.png/jpg
+    #|   |-- Frame2.png/jpg
+    #|   |-- ...
+    #|
+    #|-- ...
+    fvmd_value = fvmd(log_dir=log_path,
+    gen_path =synthesized_path,
+    gt_path =original_path
+    )
+
+    return fvmd_value
+
+# https://content-debiased-fvd.github.io/documentation/
+# https://github.com/songweige/content-debiased-fvd
+def KVD(original_path, synthesized_path):
+    pass
+    # todo, laut chatgpt only nice to have
 
 def run(original_path, synthesized_path):
     warnings.filterwarnings("ignore", category=UserWarning) # in torchvision "Arguments other than a weight enum ... deprecated"
