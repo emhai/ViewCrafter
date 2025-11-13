@@ -211,7 +211,7 @@ class ViewCrafter:
             batch_samples, current_x0, intermediates = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
                                                    self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
                                                    self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-                                                   condition_index, guidance_image=None, latent=None, latents=None, mask=None, x_T=self.x_T,
+                                                   condition_index, guidance_image=None, latent=None, latents=latents, mask=masks, x_T=self.x_T,
                                                                               ddim_sampler=self.ddim_sampler)
 
             # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
@@ -859,7 +859,7 @@ class ViewCrafter:
 
             if mode == "single":
                 self.images, self.img_ori = self.load_initial_images(image_dir=self.opts.image_dir)
-                if not self.opts.use_easi3r:
+                if not self.opts.use_easi3r or dir_empty(self.base_dir / PICKLES_DIR):
                     self.run_dust3r(input_images=self.images)
 
             else: # mode == "multi"

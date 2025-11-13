@@ -117,7 +117,7 @@ def run_easi3r_from_viewcrafter(base_path, n_frames):
                f"--seq_name {name} "
                f"--input {video} "
                f"--output_dir {easi3r_results_dir} "
-               f"--sam2_mask_refine "
+               f"--sam2_mask_refine " # this is important! do not delete
                f"--num_frames {n_frames} "
                f"--silent")
 

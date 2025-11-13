@@ -22,6 +22,64 @@ from utils.visualization_utils import visualize_pixel_masks
 TARGET_W, TARGET_H = 1024, 576
 TARGET_AR = TARGET_W / TARGET_H  # 16:9
 
+def dir_empty(dir_path):
+     path = Path(dir_path)
+     has_next = next(path.iterdir(), None)
+     if has_next is None:
+             return True
+     return False
+
+def downsample_crop_video(input_video, output_video, starting_time, amount_frames, fps, sec):
+
+    crf = 18
+    preset = "veryfast"
+    vf = f"fps={fps}"
+
+    crop = (
+        "crop='if(gte(iw/ih,16/9),ih*16/9,iw)':'"
+        "if(gte(iw/ih,16/9),ih,iw*9/16)':'"
+        "(iw-ow)/2':'(ih-oh)/2'"
+    )
+
+    vf = f"fps={fps},setsar=1,{crop},scale={TARGET_W}:{TARGET_H}:flags=lanczos"
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-ss", str(starting_time),
+        "-t", str(sec),
+        "-i", str(input_video),
+        "-vf", vf,  # <— single, complete filtergraph here
+        "-frames:v", str(amount_frames),
+        "-an",
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-crf", "18",  # optional; remove if you want ffmpeg default (23)
+        "-preset", "veryfast",  # optional; remove if you want default (medium)
+        str(output_video)
+    ]
+
+    subprocess.run(cmd, check=True)
+
+def create_modified_dataset(input_dir, output_dir, starting_time, amount_frames):
+
+    fps = 15
+    amount_frames = 60
+    sec = 4
+    dir_name = Path(input_dir).name
+
+    new_folder = output_dir / f"{dir_name}_{sec}x{fps}"
+    new_folder.mkdir(exist_ok=True)
+
+    for file in Path(input_dir).iterdir():
+        if file.suffix != ".mp4":
+            shutil.copy(file, new_folder)
+        name = file.name
+        downsample_crop_video(file, new_folder / name, starting_time, amount_frames, fps, sec)
+
+    with open(output_dir / "README.txt", 'w') as output:
+        output.write(f"amount of frames: {amount_frames}\n fps: {fps}\n starting_time: {starting_time}")
+
+
 def extract_frames(video_path, frames_path):
     print(f"Extracting frames from {video_path}")
 
@@ -251,9 +309,12 @@ def main():
     # img2 = "/media/emmahaidacher/Volume/GOOD_RESULTS/espresso_1cam_16frames_pickle_deflick_reuse_latent_alpha8/camera_frames/0/00002.png"
     # vid = "/media/emmahaidacher/Volume/DATASETS/INTERNET/espresso_short/1_video_short/0.mp4"
     # estimate_background(vid)
-    separate_cameras(results_folder, cameras_folder, DIFFUSION_FRAMES)
-    separate_cameras(results_folder, cameras_folder, RENDER_FRAMES)
+    # separate_cameras(results_folder, cameras_folder, DIFFUSION_FRAMES)
+    # separate_cameras(results_folder, cameras_folder, RENDER_FRAMES)
 
+    output_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS")
+    input_path = Path("/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/4dgs_dataset/coffee_martini")
+    create_modified_dataset(input_path, output_path, 2, 60)
     # input_path = Path("/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/SelfCap/yoga3/")
     # output_path = Path("/media/emmahaidacher/Volume/TESTS/test_sep")
     # output_path.mkdir(exist_ok=True)
