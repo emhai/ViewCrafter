@@ -13,7 +13,7 @@ if __name__=="__main__":
         prefix = datetime.now().strftime("%Y%m%d_%H%M")
         opts.exp_name = f'{prefix}_{os.path.splitext(os.path.basename(opts.image_dir))[0]}'
 
-    opts.save_dir = os.path.join(opts.out_dir,opts.exp_name)
+    opts.save_dir = os.path.join(opts.out_dir, opts.exp_name)
 
     if os.path.exists(opts.save_dir):
         prefix = datetime.now().strftime("%Y%m%d_%H%M")

@@ -98,7 +98,7 @@ def run_easi3r_from_viewcrafter(base_path, n_frames):
     original_videos_dir = base_path / ORIGINAL_VIDEOS_DIR
 
     easi3r_results_dir = base_path / EASI3R_RESULTS_DIR
-    input_masks_dir = base_path / EASI3R_MASKS_INPUT_DIR
+    input_masks_dir = base_path / EASI3R_MASKS_DIR
     pickle_path = base_path / PICKLES_DIR
 
     easi3r_results_dir.mkdir()

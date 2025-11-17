@@ -1,24 +1,9 @@
-import os
 import shutil
 import subprocess
-
 import cv2
 import numpy as np
-import torch
-from PIL import Image
-import torch.nn.functional as F
 from pathlib import Path
-from skimage import data, filters
-from torch.ao.nn.quantized.functional import threshold
-from torch.utils.tensorboard.summary import video
-
 from configs.v2v_config import *
-from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip, ffmpeg_resize
-
-import matplotlib.pyplot as plt
-from utils.pvd_utils import save_pointcloud_with_normals, get_pc, center_crop_image
-from utils.visualization_utils import visualize_pixel_masks
-
 
 def dir_empty(dir_path):
      path = Path(dir_path)
@@ -28,110 +13,57 @@ def dir_empty(dir_path):
      return False
 
 def extract_frames(video_path, frames_path):
-    print(f"Extracting frames from {video_path}")
+    # print(f"Extracting frames from {video_path}")
 
     #  '-hide_banner', '-log_level', 'error'
     ffmpeg_command = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-i', str(video_path), f"{str(frames_path)}/%05d.png"]
     subprocess.run(ffmpeg_command)
 
-def center_crop_to_ratio(frame, target_ratio):
-    h, w = frame.shape[:2]
-    ar = w / h
-
-    if abs(ar - target_ratio) < 1e-3:
-        # Already at target aspect, no crop
-        return frame
-
-    if ar > target_ratio:
-        # Too wide -> crop width
-        new_w = int(round(h * target_ratio))
-        x0 = (w - new_w) // 2
-        x1 = x0 + new_w
-        return frame[:, x0:x1]
-    else:
-        # Too tall -> crop height
-        new_h = int(round(w / target_ratio))
-        y0 = (h - new_h) // 2
-        y1 = y0 + new_h
-        return frame[y0:y1, :]
-
-def extract_first_n_frames_opencv(src_path, dst_path, n, codec="mp4v"):
-    src_path = str(src_path)
-    dst_path = str(dst_path)
-
-    cap = cv2.VideoCapture(src_path)
-    if not cap.isOpened():
-        raise RuntimeError(f"Could not open {src_path}")
-
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0  # fallback if not reported
-    w  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    h  = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-
-    fourcc = cv2.VideoWriter_fourcc(*codec)
-    out = cv2.VideoWriter(dst_path, fourcc, fps, (w, h))
-    if not out.isOpened():
-        cap.release()
-        raise RuntimeError(f"Could not open writer for {dst_path} with codec {codec}")
-
-    frames_written = 0
-    while frames_written < n:
-        ok, frame = cap.read()
-        if not ok:
-            break  # video shorter than N frames
-
-        # frame = center_crop_to_ratio(frame, TARGET_AR)
-        # resized = cv2.resize(frame, (TARGET_W, TARGET_H), interpolation=cv2.INTER_AREA)
-
-        out.write(frame)
-        frames_written += 1
-
-    cap.release()
-    out.release()
-
-    if frames_written != n:
-        print(f"Warning: source had only {frames_written} frames; wrote fewer than requested {n}.")
-
-
 def create_folder_structure(folders):
     for folder in folders:
         if not folder.exists():
             folder.mkdir()
-            print('Created folder:', folder)
+            # print('Created folder:', folder)
 
-def setup_structure(save_path, source_path, num_frames):
+def setup_structure(save_path, source_path, gt_path):
 
-    frames_path = save_path / CAMERA_FRAMES_DIR
     inputs_path = save_path / INPUTS_DIR
     results_path = save_path / RESULTS_DIR
-    cameras_path = save_path / SEPERATED_CAMERAS_DIR
-    og_video_path = save_path / ORIGINAL_VIDEOS_DIR
-    short_videos_path = save_path / SHORT_VIDEOS_DIR
+    gen_videos_path = save_path / GENERATED_VIDEOS_DIR
+    gen_frames_path = save_path / GENERATED_FRAMES_DIR
+    og_videos_path = save_path / ORIGINAL_VIDEOS_DIR
+    og_frames_path = save_path / ORIGINAL_FRAMES_DIR
+    gt_videos_path = save_path / GROUND_TRUTH_VIDEOS_DIR
+    gt_frames_path = save_path / GROUND_TRUTH_FRAMES_DIR
 
-    all_folders = [frames_path, inputs_path, results_path, cameras_path, og_video_path, short_videos_path]
+    all_folders = [og_videos_path,
+                   og_frames_path,
+                   gen_videos_path,
+                   gen_frames_path,
+                   gt_videos_path,
+                   gt_frames_path,
+                   inputs_path,
+                   results_path]
+
     create_folder_structure(all_folders)
 
     # copy video folder
-    for source_video in source_path.iterdir():
-        cam = cv2.VideoCapture(str(source_video))
-        w, h = cam.get(cv2.CAP_PROP_FRAME_WIDTH), cam.get(cv2.CAP_PROP_FRAME_HEIGHT) # if needed for OOM
+    for og_video in source_path.iterdir():
+        target_video_path = og_videos_path / og_video.name
+        shutil.copy(og_video, target_video_path)
+        frames_path = og_frames_path / og_video.stem
+        frames_path.mkdir(exist_ok=True)
+        extract_frames(og_video, frames_path)
 
-        target_video_path = og_video_path / source_video.name
-        target_short_video_path = short_videos_path / source_video.name
+    # copy ground truths folder
+    for gt_video in gt_path.iterdir():
+        target_video_path = gt_videos_path / gt_video.name
+        shutil.copy(gt_video, target_video_path)
+        frames_path = gt_frames_path / gt_video.stem
+        frames_path.mkdir(exist_ok=True)
+        extract_frames(gt_video, frames_path)
 
-        extract_first_n_frames_opencv(source_video, target_short_video_path, num_frames, codec="mp4v")
-
-        shutil.copy(source_video, target_video_path)
-
-    print(f"Copying videos from {source_path} to {og_video_path}")
-
-    # extract frames
-    for video in short_videos_path.iterdir():
-        new_path = frames_path / video.stem
-        new_path.mkdir()
-        extract_frames(video, new_path)
-
-    frame_folders = sorted(frames_path.iterdir())
+    frame_folders = sorted(og_frames_path.iterdir())
     frame_files = [sorted(files.iterdir()) for files in frame_folders]
 
     num_frames = len(frame_files[0])
@@ -146,7 +78,7 @@ def setup_structure(save_path, source_path, num_frames):
             dst = new_input_folder / f"{folder_idx}.png"
             shutil.copyfile(src, dst)
 
-    print("done")
+    print("Folder Setup Completed!")
 
 def create_video(input_folder):
 
@@ -170,7 +102,6 @@ def create_video(input_folder):
         frame = cv2.imread(img_path)
         video.write(frame)
 
-    # Release resources
     video.release()
     cv2.destroyAllWindows()
 
@@ -198,8 +129,6 @@ def separate_cameras(results_folder, all_cameras_folder, frame_type):
     for all_frames_folder in (all_cameras_folder / frame_type).iterdir():
         create_video(all_frames_folder)
 
-
-
 # https://learnopencv.com/simple-background-estimation-in-videos-using-opencv-c-python/
 def estimate_background(video):
     frames = []
@@ -214,7 +143,6 @@ def estimate_background(video):
     background = np.median(frames, axis=0).astype(np.uint8)
 
     cv2.imwrite('/media/emmahaidacher/Volume/TESTS/bg.png', background)
-
 
 def clean_empty_camera_folders():
     base_folder = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/")
@@ -244,8 +172,6 @@ def print_diffusion_model(model, max_depth=3, prefix='', depth=0):
     for name, child in model.named_children():
         print_diffusion_model(child, max_depth, prefix=name + ': ', depth=depth + 1)
 
-
-
 def main():
     results_folder = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/20251020_1740_yoga_debug/results")
     cameras_folder = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/20251020_1740_yoga_debug/cameras")
@@ -261,12 +187,11 @@ def main():
 
     output_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS")
     input_path = Path("/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/SelfCap/bike-release/videos")
-    create_modified_dataset(input_path, output_path, "bike", 10, 4, 15)
     # input_path = Path("/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/SelfCap/yoga3/")
     # output_path = Path("/media/emmahaidacher/Volume/TESTS/test_sep")
     # output_path.mkdir(exist_ok=True)
     # setup_structure(output_path, input_path, 16)
-    # clean_empty_camera_folders()
+    clean_empty_camera_folders()
     # clean_mask("")
 
 if __name__ == "__main__":

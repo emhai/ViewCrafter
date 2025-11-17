@@ -1,5 +1,6 @@
 import os
 import argparse
+from configs.v2v_config import *
 
 def get_parser():
     parser = argparse.ArgumentParser()
@@ -59,8 +60,14 @@ def get_parser():
 
     ## v2v
     parser.add_argument("--use_mast3r", action='store_true', default=False, help="use the mast3r framework for point cloud creation instead of dust3r")
-    parser.add_argument("--pickle_path",  type=str,  default='/home/emmahaidacher/Masterthesis/MasterThesis/pickle.pkl', help="Path to dynamic point cloud created from pickle") # todo default
     parser.add_argument("--n_frames", type=int, default=16, help="num of frames for newly generated videos")
     parser.add_argument("--use_easi3r", action='store_true', default=False, help="use the easi3r framework for point cloud creation instead of dust3r")
+
+    parser.add_argument("--use_ddim_inversion", action='store_true', default=False, help="use DDIM inversed noise from first run as starting noise")
+    parser.add_argument("--use_latent_blending", action='store_true', default=False, help="use latent masked blending")
+    parser.add_argument("--gt_dir", type=str, default="", help="Path to ground truth videos")
+    parser.add_argument("--mask_type", choices=[m.name.lower() for m in MaskType], default="comp_with_prev")
+    parser.add_argument("--msa", choices=[m.name.lower() for m in MSAType], default=None)
+
 
     return parser

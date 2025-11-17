@@ -7,6 +7,7 @@ from lvdm.common import extract_into_tensor
 import copy
 
 from lvdm.modules.attention import MSATracker
+from configs.v2v_config import MSAType
 
 
 class DDIMSampler(object):
@@ -216,6 +217,7 @@ class DDIMSampler(object):
                fs=None,
                timestep_spacing='uniform', #uniform_trailing for starting from last timestep
                guidance_rescale=0.0,
+               msa=None,
                **kwargs
                ):
         
@@ -263,6 +265,7 @@ class DDIMSampler(object):
                                                     precision=precision,
                                                     fs=fs,
                                                     guidance_rescale=guidance_rescale,
+                                                    msa=msa,
                                                     **kwargs)
         return samples, intermediates
 
@@ -272,16 +275,14 @@ class DDIMSampler(object):
                       callback=None, timesteps=None, quantize_denoised=False,
                       mask=None, x0=None, img_callback=None, log_every_t=100,
                       temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None,
-                      unconditional_guidance_scale=1., unconditional_conditioning=None, verbose=True,precision=None,fs=None,guidance_rescale=0.0,
-                      **kwargs):
+                      unconditional_guidance_scale=1., unconditional_conditioning=None, verbose=True,
+                      precision=None,fs=None,guidance_rescale=0.0, msa=None, **kwargs):
         device = self.model.betas.device        
         b = shape[0]
         if x_T is None:
             img = torch.randn(shape, device=device)
-            # todo here ddim inversion noise
         else:
-            img2 = torch.randn(shape, device=device)
-            img = x_T
+            img = x_T # DDIM inversion noise
         if precision is not None:
             if precision == 16:
                 img = img.to(dtype=torch.float16)
@@ -303,10 +304,13 @@ class DDIMSampler(object):
         # clean_cond = kwargs.pop("clean_cond", False)
         clean_cond = (conds_z0 is not None)
 
-        # msa_tracker = MSATracker(start_step=4, start_layer=10)  # from MasaCtrl
-        # msa_tracker = MSATracker(start_step=0, start_layer=7) # from Pix2Video
-        # msa_tracker = MSATracker(start_step=0, start_layer=7)
-        msa_tracker = None
+
+        if msa == MSAType.MASACTRL:
+            msa_tracker = MSATracker(start_step=4, start_layer=10)  # from MasaCtrl
+        elif msa == MSAType.PIX_2_VIDEO:
+            msa_tracker = MSATracker(start_step=0, start_layer=7) # from Pix2Video
+        else:
+            msa_tracker = None
 
         # cond_copy, unconditional_conditioning_copy = copy.deepcopy(cond), copy.deepcopy(unconditional_conditioning)
         for i, step in enumerate(iterator):

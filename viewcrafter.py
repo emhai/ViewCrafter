@@ -9,27 +9,11 @@ from dust3r.inference import inference, load_model
 from dust3r.utils.image import load_images
 from dust3r.image_pairs import make_pairs
 from dust3r.cloud_opt import global_aligner, GlobalAlignerMode
-from dust3r.utils.device import to_numpy
 from mast3r.model import AsymmetricMASt3R
 
-from configs.v2v_config import *
-
-import shutil
-import trimesh
-import torch
-import numpy as np
-import torchvision
-import os
-import copy
-import cv2  
 import glob
-from PIL import Image
-import pytorch3d
+
 from pytorch3d.structures import Pointclouds
-from torchvision.utils import save_image
-import torch.nn.functional as F
-import torchvision.transforms as transforms
-from PIL import Image
 
 from utils.pvd_utils import *
 from utils.v2v_utils import *
@@ -41,7 +25,8 @@ from lvdm.models.samplers.ddim import DDIMSampler
 from lvdm.models.samplers.ddim_multiplecond import DDIMSampler as DDIMSampler_multicond
 from omegaconf import OmegaConf
 from pytorch_lightning import seed_everything
-from utils.diffusion_utils import instantiate_from_config, load_model_checkpoint, image_guided_synthesis, get_latent_z
+from utils.diffusion_utils import instantiate_from_config, load_model_checkpoint, image_guided_synthesis, get_latent_z, \
+    guided_DDIM_inversion
 from pathlib import Path
 from torchvision.utils import save_image
 import time
@@ -52,43 +37,40 @@ class ViewCrafter:
         self.opts = opts
         self.device = opts.device
 
-        is_master = self.opts.mode in ['single_video_interp', 'multi_video_interp']
-        if is_master:
+        is_v2v = self.opts.mode in ['single_video_interp', 'multi_video_interp']
+        if is_v2v:
 
-            self.predicted_poses = None
-            self.predicted_focals = None
-            self.guidance_image = None
+            self.run_number = 0                 # which run currently
+            self.predicted_poses = None         # pred poses for dust3r with multiple cams
+            self.predicted_focals = None        # pred focals for dust3r with multiple cams
+            self.guidance_image = None          # cross-attention guidance. Set to first picture in first run
+
             self.prev_image = None
-            self.prev_latent = None
             self.prev_latents = None
             self.first_image = None
-            self.first_latent = None
             self.first_latents = None
-            self.run_number = 0
-            self.mask_type = MaskType.EASI3R_PREV
-            self.ddim_sampler = None
-            self.radius = None
-            self.x_T = None
-            self.last_pc = None
+            self.mask_type = MaskType[self.opts.mask_type.upper()].name
+            self.msa_type = MSAType[self.opts.msa.upper()].name if self.opts.msa is not None else None
+            self.radius = None                  # static radius to keep trajectory same even if point clouds differ
+            self.DDIM_noise = None              # starting noise for subsequent runs - DDIM inversion
 
             assert os.path.isdir(self.opts.image_dir)
 
             self.base_dir = Path(self.opts.save_dir)
-            setup_structure(self.base_dir, Path(self.opts.image_dir), self.opts.n_frames)
+            setup_structure(self.base_dir, Path(self.opts.image_dir), Path(self.opts.gt_dir))
 
-            run_easi3r_from_viewcrafter(self.base_dir, self.opts.n_frames)
-
+            run_easi3r_from_viewcrafter(self.base_dir, self.opts.n_frames) # stores masks and pickles to folders
 
         if self.opts.use_mast3r:
-            print("USING MAST3R")
             self.setup_mast3r()
         else:
             self.setup_dust3r()
 
         self.setup_diffusion()
-        # initialize ref images, pcd
+        self.ddim_sampler = DDIMSampler(self.diffusion) #if not multiple_cond_cfg else DDIMSampler_multicond(model)
 
-        if not gradio and not is_master:
+        # initialize ref images, pcd
+        if not gradio and not is_v2v:
             if os.path.isfile(self.opts.image_dir):
                 self.images, self.img_ori = self.load_initial_images(image_dir=self.opts.image_dir)
                 self.run_dust3r(input_images=self.images)
@@ -157,7 +139,6 @@ class ViewCrafter:
         render_results, viewmask = self.render_pcd(pcd, imgs, masks, num_views,renderer, self.device,nbv=False)
         return render_results, viewmask
 
-    
     def run_diffusion(self, renderings, masks=None):
 
         prompts = [self.opts.prompt]
@@ -165,17 +146,11 @@ class ViewCrafter:
         condition_index = [0]
 
         if self.mask_type in [MaskType.COMP_WITH_PREV, MaskType.EASI3R_PREV]:
-            latent = self.prev_latent
-            latents = None if self.prev_latents is None else self.prev_latents['x_inter']
+            latents = self.prev_latents
         elif self.mask_type in [MaskType.COMP_WITH_FIRST, MaskType.EASI3R_FIRST]:
-            latent = self.first_latent
-            latents = None if self.first_latents is None else self.first_latents['x_inter']
+            latents = self.first_latents
         else:
-            latent = None
             latents = None
-
-        if self.ddim_sampler is None: # todo in setup?
-            self.ddim_sampler = DDIMSampler(self.diffusion) #if not multiple_cond_cfg else DDIMSampler_multicond(model)
 
         with torch.no_grad(), torch.cuda.amp.autocast():
             # [1,1,c,t,h,w]
@@ -184,84 +159,50 @@ class ViewCrafter:
             #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
             #                                        self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
             #                                        condition_index, guidance_image=None, latent=None, mask=None, ddim_sampler=self.ddim_sampler)
-            #
-            # Use same reference picture for all
-            # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
-            #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
-            #                                        self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-            #                                        None, guidance_image=self.guidance_image, latent=None, mask=None, ddim_sampler=self.ddim_sampler)
-            # batch_samples, current_x0, intermediates = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
-            #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
-            #                                        self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-            #                                        None, guidance_image=self.guidance_image, latent=None, mask=None, ddim_sampler=self.ddim_sampler)
 
-            # Use same reference picture for all and previous_latent blending
-            # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
-            #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
-            #                                        self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-            #                                        condition_index, guidance_image=self.guidance_image, latent=self.prev_latent, mask=complete_mask, ddim_sampler=self.ddim_sampler)
-            #
-            # Use same reference picture for all and first_latent blending
-            # batch_samples, current_x0, intermediates = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
-            #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
-            #                                        self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-            #                                        None, guidance_image=self.guidance_image, latent=latent, latents=latents, mask=masks, ddim_sampler=self.ddim_sampler)
+            batch_samples, current_x0, intermediates = image_guided_synthesis(self.diffusion,
+                                                                              prompts,
+                                                                              videos,
+                                                                              self.noise_shape,
+                                                                              self.opts.n_samples,
+                                                                              self.opts.ddim_steps,
+                                                                              self.opts.ddim_eta,
+                                                                              self.opts.unconditional_guidance_scale,
+                                                                              self.opts.cfg_img,
+                                                                              self.opts.frame_stride,
+                                                                              self.opts.text_input,
+                                                                              self.opts.multiple_cond_cfg,
+                                                                              self.opts.timestep_spacing,
+                                                                              self.opts.guidance_rescale,
+                                                                              condition_index,
+                                                                              guidance_image=None,
+                                                                              latents=latents,
+                                                                              only_x0 = False,
+                                                                              mask=masks,
+                                                                              x_T=self.DDIM_noise,
+                                                                              ddim_sampler=self.ddim_sampler,
+                                                                              msa=self.msa_type)
 
-            # not same cross-attention
-            batch_samples, current_x0, intermediates = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
-                                                   self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
-                                                   self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-                                                   condition_index, guidance_image=None, latent=None, latents=latents, mask=masks, x_T=self.x_T,
-                                                                              ddim_sampler=self.ddim_sampler)
-
-            # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
-            #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
-            #                                        self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-            #                                        None, guidance_image=self.guidance_image, latent=latent, mask=masks, ddim_sampler=self.ddim_sampler)
-
-
-            if self.run_number == 0:
-                self.first_latent = current_x0
-                self.first_latents = intermediates
-                x_T = intermediates['x_inter'][-1]
-
-                # Create conditioning with ZERO point cloud (or minimal/blurred version)
-                zero_pointcloud = torch.full_like(x_T, 0)
-                z = get_latent_z(self.diffusion, videos)  # b c t h w
-                # if loop or interp:
-                #     img_cat_cond = torch.zeros_like(z)
-                #     img_cat_cond[:,:,0,:,:] = z[:,:,0,:,:]
-                #     img_cat_cond[:,:,-1,:,:] = z[:,:,-1,:,:]
-                # else:
-                img_cat_cond = z
-                img_emb = self.diffusion.embedder(self.guidance_image)  ## blc
-                img_emb = self.diffusion.image_proj_model(img_emb)
-
-                cond_emb = self.diffusion.get_learned_conditioning(prompts)
-                cond_run0_nulltext = {
-                    "c_crossattn": [torch.cat([cond_emb, img_emb], dim=1)],
-                    # since prompt and guidance_img same -- reuse
-                    "c_concat": [img_cat_cond]  # Use zero/null point cloud for inversion
-                }
-
-                inverted_noise_run0, _ = self.ddim_sampler.ddim_inversion(
-                    x0=x_T,
-                    cond=cond_run0_nulltext,  # Invert with null point cloud
-                    ddim_steps=50,
-                    ddim_eta=0.0,
-                    unconditional_guidance_scale=1.0,
-                )
-                self.x_T = inverted_noise_run0
-
-
-
-            self.prev_latent = current_x0
             self.prev_latents = intermediates
             self.ddim_sampler.first_run = False
 
+            if self.run_number == 0:
+                self.first_latents = intermediates
+                result = intermediates[-1]
+                test = result == current_x0
 
-            # save_results_seperate(batch_samples[0], self.opts.save_dir, fps=8)
-            # torch.Size([1, 3, 25, 576, 1024]) [-1,1]
+                self.DDIM_noise = guided_DDIM_inversion(self.diffusion,
+                                      videos,
+                                      result,
+                                      self.guidance_image,
+                                      prompts,
+                                      self.ddim_sampler,
+                                      self.opts.ddim_steps,
+                                      self.opts.ddim_eta,
+                                      self.opts.unconditional_guidance_scale
+                                      )
+
+
 
         return torch.clamp(batch_samples[0][0].permute(1,2,3,0), -1., 1.)
 
@@ -314,8 +255,8 @@ class ViewCrafter:
         mask_save_path = Path(self.opts.save_dir) / MASKS_DIR
 
         if self.mask_type in [MaskType.EASI3R_PREV, MaskType.EASI3R_FIRST]:
-            prev_mask_dir = self.base_dir / EASI3R_MASKS_INPUT_DIR / str(self.run_number - 1)
-            mask_dir = self.base_dir / EASI3R_MASKS_INPUT_DIR / str(self.run_number)
+            prev_mask_dir = self.base_dir / EASI3R_MASKS_DIR / str(self.run_number - 1)
+            mask_dir = self.base_dir / EASI3R_MASKS_DIR / str(self.run_number)
             prev_mask_folders = sorted(prev_mask_dir.iterdir())
             mask_folders = sorted(mask_dir.iterdir())
             return load_easi3r_masks(mask_folders, prev_mask_folders, current_image, H=self.opts.height // 2, W=self.opts.width // 2, output_dir=mask_save_path)
@@ -556,7 +497,6 @@ class ViewCrafter:
         diffusion_results = self.run_diffusion(render_results, latent_masks)
         save_video((diffusion_results + 1.0) / 2.0, os.path.join(self.opts.save_dir, 'diffusion.mp4'),
                    os.path.join(self.opts.save_dir, DIFFUSION_FRAMES))
-        self.last_pc = pcd
         return diffusion_results
 
     def nvs_sparse_view(self,iter):
@@ -833,7 +773,7 @@ class ViewCrafter:
 
         input_dir = self.base_dir / INPUTS_DIR  # all inputs
         results_dir = self.base_dir /RESULTS_DIR  # all results
-        cameras_dir = self.base_dir / SEPERATED_CAMERAS_DIR # all cameras (result in the end)
+        cameras_dir = self.base_dir / GENERATED_VIDEOS_DIR # all cameras (result in the end)
 
         all_frames = [x.name for x in sorted(input_dir.iterdir(), key=lambda x: int(x.stem))]
         all_frames = all_frames[:self.opts.n_frames] # todo assert that n_frames < input_vid_frames
