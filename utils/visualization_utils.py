@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import cv2
@@ -7,6 +8,69 @@ from PIL import Image
 from matplotlib import pyplot as plt
 
 import torch.nn.functional as F
+
+
+def visualize_camera_positions(models_json_path, plane="xy"):
+        """
+        Visualize camera positions from models.json in 2D.
+
+        plane:
+          "xy" -> x horizontal, y vertical
+          "xz" -> x horizontal, z vertical  (good top-down view)
+          "yz" -> y horizontal, z vertical
+        """
+        models_json_path = Path(models_json_path)
+
+        with models_json_path.open("r") as f:
+            data = json.load(f)
+
+        if isinstance(data, list):
+            views = data
+        elif isinstance(data, dict):
+            views = data.get("views", list(data.values()))
+        else:
+            raise ValueError("Unexpected JSON structure in models.json")
+
+        positions = []
+        names = []
+
+        for v in views:
+            if "position" not in v:
+                continue
+            positions.append(v["position"])  # [x, y, z]
+            names.append(v.get("name", "unknown"))
+
+        if not positions:
+            raise ValueError("No camera positions found")
+
+        xs3 = [p[0] for p in positions]
+        ys3 = [p[1] for p in positions]
+        zs3 = [p[2] for p in positions]
+
+        if plane == "xy":
+            xs, ys = xs3, ys3
+            xlabel, ylabel = "X", "Y"
+        elif plane == "xz":
+            xs, ys = xs3, zs3
+            xlabel, ylabel = "X", "Z"
+        elif plane == "yz":
+            xs, ys = ys3, zs3
+            xlabel, ylabel = "Y", "Z"
+        else:
+            raise ValueError("plane must be one of 'xy', 'xz', 'yz'")
+
+        plt.figure(figsize=(7, 6))
+        plt.scatter(xs, ys, s=20)
+
+        for x, y, name in zip(xs, ys, names):
+            plt.text(x, y, name.split("_")[1], fontsize=7)
+
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
+        plt.title(f"Camera Positions ({plane.upper()} projection)")
+        plt.gca().set_aspect("equal", adjustable="box")
+        plt.tight_layout()
+        plt.show()
 
 def save_masks(mask_list, save_dir, visualize=True, save=True):
     save_dir = Path(save_dir)
@@ -319,7 +383,7 @@ def visualize_extrinsics_yaml(path):
 
 def main():
     path = "/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/SelfCap/corgi-release/optimized/extri.yml"
-    visualize_extrinsics_yaml(path)
-
+    # visualize_extrinsics_yaml(path)
+    visualize_camera_positions(Path("/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/06_Goats/models.json"))
 if __name__ == '__main__':
     main()

@@ -20,8 +20,8 @@ from fvmd import fvmd
 # https://www.geeksforgeeks.org/python-peak-signal-to-noise-ratio-psnr/
 def PSNR(original_path, synthesized_path):
 
-    original = cv2.imread(original_path).astype(np.float32)
-    synthesized = cv2.imread(synthesized_path).astype(np.float32)
+    original = cv2.imread(str(original_path)).astype(np.float32)
+    synthesized = cv2.imread(str(synthesized_path)).astype(np.float32)
 
     mse = np.mean((original - synthesized) ** 2)
     if mse == 0:  # MSE is zero means no noise is present in the signal therefore PSNR has no importance.
@@ -30,11 +30,39 @@ def PSNR(original_path, synthesized_path):
     psnr = 20 * log10(max_pixel / sqrt(mse))
     return psnr
 
+# https://www.geeksforgeeks.org/python-peak-signal-to-noise-ratio-psnr/
+def PSNR_video(original_path, synthesized_path):
+
+    frames_ref = sorted(original_path.iterdir())
+    frames_test = sorted(synthesized_path.iterdir())
+    assert len(frames_ref) == len(frames_test), "Both dirs must have same number of frames."
+
+    mse_list = []
+
+    for p_ref, p_test in zip(frames_ref, frames_test):
+        img_ref = cv2.imread(str(p_ref)).astype(np.float32)
+        img_test = cv2.imread(str(p_test)).astype(np.float32)
+
+        assert img_ref is not None and img_test is not None, "Failed to read one of the frames."
+        assert img_ref.shape == img_test.shape, "Frame shapes must match."
+
+        mse_frame = np.mean((img_ref - img_test) ** 2)
+        mse_list.append(mse_frame)
+
+    mse_avg = np.mean(mse_list)
+
+    if mse_avg == 0:
+        return float("inf")
+
+    max_pixel = 255.0
+    psnr = 20 * log10(max_pixel / sqrt(mse_avg))
+    return psnr
+
 # https://stackoverflow.com/questions/71567315/how-to-get-the-ssim-comparison-score-between-two-images
 def SSIM(original_path, synthesized_path):
 
-    original = cv2.imread(original_path, cv2.IMREAD_GRAYSCALE)
-    synthesized = cv2.imread(synthesized_path, cv2.IMREAD_GRAYSCALE)
+    original = cv2.imread(str(original_path), cv2.IMREAD_GRAYSCALE)
+    synthesized = cv2.imread(str(synthesized_path), cv2.IMREAD_GRAYSCALE)
     assert synthesized.shape == original.shape
     assert synthesized.max() <= 255 and synthesized.min() >= 0
     assert original.max() <= 255 and original.min() >= 0
@@ -51,9 +79,9 @@ def LPIPS(original_path, synthesized_path):
     spatial = True         # Return a spatial map of perceptual distance.
     loss_fn = lpips.LPIPS(net='alex', spatial=spatial, verbose=False).cuda()  # Can also set net = 'squeeze' or 'vgg'
 
-    original = lpips.im2tensor(lpips.load_image(original_path))
+    original = lpips.im2tensor(lpips.load_image(str(original_path)))
     original = original.cuda()
-    synthesized = lpips.im2tensor(lpips.load_image(synthesized_path))
+    synthesized = lpips.im2tensor(lpips.load_image(str(synthesized_path)))
     synthesized = synthesized.cuda()
 
     d = loss_fn.forward(original, synthesized)
@@ -70,7 +98,7 @@ def LPIPS(original_path, synthesized_path):
 # https://github.com/mseitzer/pytorch-fid
 def FID(original_path, synthesized_path):
     # requires full paths
-    paths = [original_path, synthesized_path]
+    paths = [str(original_path), str(synthesized_path)]
     fid_value = calculate_fid_given_paths(
         paths,
         batch_size=50,
@@ -90,8 +118,8 @@ def FID(original_path, synthesized_path):
 def FVD(original_path, synthesized_path):
     evaluator = fvd.cdfvd('videomae', ckpt_path=None, device='cuda')
 
-    evaluator.compute_real_stats(evaluator.load_videos(original_path))
-    evaluator.compute_fake_stats(evaluator.load_videos(synthesized_path))
+    evaluator.compute_real_stats(evaluator.load_videos(str(original_path)))
+    evaluator.compute_fake_stats(evaluator.load_videos(str(synthesized_path)))
     score = evaluator.compute_fvd_from_stats()
 
     return score
@@ -109,10 +137,9 @@ def FVMD(original_path, synthesized_path, log_path):
     #|   |-- ...
     #|
     #|-- ...
-    fvmd_value = fvmd(log_dir=log_path,
-    gen_path =synthesized_path,
-    gt_path =original_path
-    )
+    fvmd_value = fvmd(log_dir=str(log_path),
+    gen_path=str(synthesized_path),
+    gt_path=str(original_path))
 
     return fvmd_value
 
