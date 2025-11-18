@@ -61,7 +61,7 @@ def extract_frames(video_path, frames_path):
     subprocess.run(ffmpeg_command)
 
 def ffmpeg_side_by_side_vid(vid1, vid2, output_vid):
-    ffmpeg_command = ["ffmpeg", "-i", str(vid1), "-i", str(vid2), "-filter_complex", "hstack", "-c:v", "libx264", str(output_vid)]
+    ffmpeg_command = ["ffmpeg", "-i", str(vid1), "-i", str(vid2), "-filter_complex", "hstack=shortest=1", "-c:v", "libx264", str(output_vid)]
     subprocess.run(ffmpeg_command)
 
 def create_folder_structure(folders):

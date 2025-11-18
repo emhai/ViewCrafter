@@ -306,7 +306,6 @@ def run_metrics(base_dir):
                 f"{FID_vid:.3f}"
             ])
 
-
         gt_name = ground_truth_frame.name
         gen_name = Path(best).name
         gt_video = gt_videos_dir / f"{gt_name}.mp4"
