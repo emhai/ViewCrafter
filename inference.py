@@ -72,7 +72,7 @@ if __name__=="__main__":
         writer = csv.writer(f)
         writer.writerow([
             opts.exp_name,
-            opts.no_frames,
+            opts.n_frames,
             f"{t_total:.3f}",
             f"{t_easi3r:.3f}",
             f"{t_ddim:.3f}",

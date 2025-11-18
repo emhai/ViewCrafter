@@ -14,21 +14,13 @@ def init_results_file(base_dir):
             writer = csv.writer(f)
             writer.writerow(
                 [
-                    "dataset",      # dataset name
-                    "mode",
-                    "exp_name",     # dataset_script
-                    "frames",
-                    "no_input_videos",
-                    "no_output_videos",
-                    "returncode",   # subprocess return code
-                    "t_total",      # wall-clock runtime
-                    "t_easi3r",
-                    "t_ddim",
-                    "t_dust3r",
-                    "t_misc",
+                    "exp_name",
+                    "GT_video",
+                    "GEN_video",
                     "PSNR",
                     "SSIM",
-                    "LPIPS"
+                    "LPIPS",
+                    "FID"
                 ]
             )
     return results_file
@@ -43,7 +35,7 @@ def init_timings_file(base_dir):
                 [
                     "exp_name",
                     "frames",
-                    "t_total",      # wall-clock runtime
+                    "t_total",
                     "t_easi3r",
                     "t_ddim",
                     "t_dust3r",
@@ -68,6 +60,10 @@ def extract_frames(video_path, frames_path):
     ffmpeg_command = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-i', str(video_path), f"{str(frames_path)}/%05d.png"]
     subprocess.run(ffmpeg_command)
 
+def ffmpeg_side_by_side_vid(vid1, vid2, output_vid):
+    ffmpeg_command = ["ffmpeg", "-i", str(vid1), "-i", str(vid2), "-filter_complex", "hstack", "-c:v", "libx264", str(output_vid)]
+    subprocess.run(ffmpeg_command)
+
 def create_folder_structure(folders):
     for folder in folders:
         if not folder.exists():
@@ -86,6 +82,7 @@ def setup_structure(save_path, source_path, gt_path):
     gt_frames_path = save_path / GROUND_TRUTH_FRAMES_DIR
     rnd_videos_path = save_path / RENDERED_VIDEOS_DIR
     rnd_frames_path = save_path / RENDERED_FRAMES_DIR
+    vis_results_path = save_path / VIS_RESULTS_DIR
 
     all_folders = [og_videos_path,
                    og_frames_path,
@@ -96,10 +93,11 @@ def setup_structure(save_path, source_path, gt_path):
                    rnd_videos_path,
                    rnd_frames_path,
                    inputs_path,
-                   results_path]
+                   results_path,
+                   vis_results_path]
 
     create_folder_structure(all_folders)
-    init_results_file(save_path)
+
     # copy video folder
     for og_video in source_path.iterdir():
         target_video_path = og_videos_path / og_video.name

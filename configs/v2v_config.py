@@ -22,6 +22,8 @@ EASI3R_RESULTS_DIR = "easi3r_results"           # results from easi3r run
 EASI3R_MASKS_DIR = "easi3r_masks"               # only masks seperated to folders from easi3r runs
 PICKLES_DIR = "easi3r_pickles"                  # resulting pickles from easi3r runs
 
+VIS_RESULTS_DIR = "vis_results"
+
 GENERATED_VIDEOS_DIR = "generated_videos"       # newly generated videos of all positions interpolated between original video
 GENERATED_FRAMES_DIR = "generated_frames"       # for each generated video, folder with all frames
 
