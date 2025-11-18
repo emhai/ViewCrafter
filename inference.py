@@ -57,7 +57,7 @@ if __name__=="__main__":
         else:
             raise KeyError(f"Invalid Mode: {opts.mode}")
 
-    timings_file = init_timings_file(Path(opts.save_dir))
+    timings_file = init_timings_file(pvd.base_dir)
     times = timer.as_dict()
 
     t_dust3r = times.get("dust3r", 0.0)
@@ -77,5 +77,8 @@ if __name__=="__main__":
             f"{t_easi3r:.3f}",
             f"{t_ddim:.3f}",
             f"{t_dust3r:.3f}",
+            f"{t_diffusion:.3f},"
+            f"{t_metrics:.3f}",
             f"{t_misc:.3f}",
         ])
+

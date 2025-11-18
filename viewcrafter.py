@@ -192,20 +192,39 @@ class ViewCrafter:
                 if self.opts.visualize_latents:
                     out_dir = self.base_dir / LATENTS_DIR
                     out_dir.mkdir(parents=True, exist_ok=True)
-                    vmin, vmax = (-1, 1)
 
                     for i, x in enumerate(intermediates):
-                        pixel_space_latent = self.diffusion.decode_first_stage(x)
-                        # x: [B, C, H, W], take first in batch for debugging
-                        img = pixel_space_latent[0].detach().cpu()
 
-                        # normalize from [-1,1] -> [0,1] (if needed)
-                        if (vmin, vmax) == (-1, 1):
-                            img = (img.clamp(-1, 1) + 1) / 2
-                        elif (vmin, vmax) != (0, 1):
-                            img = (img - vmin) / (vmax - vmin)
+                        pixel = self.diffusion.decode_first_stage(x)  # [B, C, T, H, W] or [B, C, H, W]
+                        pixel = pixel[0].detach().cpu().float()  # remove batch -> [C, T, H, W] or [C, H, W]
 
-                        save_image(img, out_dir / f"x_inter_{i:03d}.png")
+                        if pixel.ndim == 4:
+                            # [C, T, H, W] -> pick middle frame
+                            C, T, H, W = pixel.shape
+                            t_mid = T // 2
+                            frame = pixel[:, t_mid]  # [C, H, W]
+                        else:
+                            # already [C, H, W]
+                            frame = pixel
+
+                        # map [-1, 1] -> [0, 1]
+                        frame = (frame.clamp(-1, 1) + 1) / 2
+                        print("pixel min/max:", pixel.min().item(), pixel.max().item())
+
+                        save_image(frame, out_dir / f"x_inter_{i:03d}.png")
+
+                    image_files = sorted(out_dir.iterdir())
+                    images = [Image.open(str(image_file)) for image_file in image_files]
+                    rgb_images = [img.convert('RGB') for img in images]
+                    rgb_images[0].save(
+                        out_dir / "latents.gif",
+                        save_all=True,
+                        append_images=rgb_images[1:],
+                        duration=4,
+                        loop=0
+                    )
+                    for img in rgb_images:
+                        img.close()
 
                 self.first_latents = intermediates
 
@@ -659,8 +678,11 @@ class ViewCrafter:
 
         if no_cameras > 2:
             camera_traj, num_views = generate_traj_interp_closed(c2ws, H, W, focals, principal_points, self.opts.video_length, self.device)
+            print("SAME?", c2ws, H, W, focals, principal_points)
         else:
             camera_traj, num_views = generate_traj_interp(c2ws, H, W, focals, principal_points, self.opts.video_length, self.device)
+            print("SAME?", c2ws, H, W, focals, principal_points)
+
 
         render_results, viewmask = self.run_render(pcd, imgs, masks, H, W, camera_traj, num_views)
         render_results = F.interpolate(render_results.permute(0, 3, 1, 2), size=(self.opts.height, self.opts.width), mode='bilinear',   align_corners=False).permute(0, 2, 3, 1)

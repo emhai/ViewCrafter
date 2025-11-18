@@ -312,7 +312,17 @@ def run_metrics(base_dir):
         gen_video = gen_videos_dir / f"{gen_name}.mp4"
         ffmpeg_side_by_side_vid(gt_video, gen_video, vis_results_dir / f"{gt_name}_{gen_name}.mp4")
 
-        print(PSNR_vid, SSIM_vid, LPIPS_vid, FID_vid)
+    with results_file.open("a", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            base_dir.name,
+            "AVERAGE",
+            "",
+            f"{np.mean(total_psnr):.3f}",
+            f"{np.mean(total_ssim):.3f}",
+            f"{np.mean(total_lpips):.3f}",
+            f"{np.mean(total_fid):.3f}"
+        ])
 
 def run(original_path, synthesized_path):
     warnings.filterwarnings("ignore", category=UserWarning) # in torchvision "Arguments other than a weight enum ... deprecated"

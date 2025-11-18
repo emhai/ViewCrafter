@@ -39,6 +39,7 @@ def init_timings_file(base_dir):
                     "t_easi3r",
                     "t_ddim",
                     "t_dust3r",
+                    "t_diffusion",
                     "t_metrics",
                     "t_misc"
                 ]
