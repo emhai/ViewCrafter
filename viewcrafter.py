@@ -190,47 +190,14 @@ class ViewCrafter:
 
             if self.run_number == 0:
                 if self.opts.visualize_latents:
-                    out_dir = self.base_dir / LATENTS_DIR
-                    out_dir.mkdir(parents=True, exist_ok=True)
-
-                    for i, x in enumerate(intermediates):
-
-                        pixel = self.diffusion.decode_first_stage(x)  # [B, C, T, H, W] or [B, C, H, W]
-                        pixel = pixel[0].detach().cpu().float()  # remove batch -> [C, T, H, W] or [C, H, W]
-
-                        if pixel.ndim == 4:
-                            # [C, T, H, W] -> pick middle frame
-                            C, T, H, W = pixel.shape
-                            t_mid = T // 2
-                            frame = pixel[:, t_mid]  # [C, H, W]
-                        else:
-                            # already [C, H, W]
-                            frame = pixel
-
-                        # map [-1, 1] -> [0, 1]
-                        frame = (frame.clamp(-1, 1) + 1) / 2
-                        print("pixel min/max:", pixel.min().item(), pixel.max().item())
-
-                        save_image(frame, out_dir / f"x_inter_{i:03d}.png")
-
-                    image_files = sorted(out_dir.iterdir())
-                    images = [Image.open(str(image_file)) for image_file in image_files]
-                    rgb_images = [img.convert('RGB') for img in images]
-                    rgb_images[0].save(
-                        out_dir / "latents.gif",
-                        save_all=True,
-                        append_images=rgb_images[1:],
-                        duration=4,
-                        loop=0
-                    )
-                    for img in rgb_images:
-                        img.close()
+                    with self.timer.time("visualize_latents"):
+                        visualize_latents(self.base_dir, intermediates, self.diffusion)
 
                 self.first_latents = intermediates
 
                 if self.opts.use_ddim_inversion:
                     with self.timer.time("ddim"):
-                        self.DDIM_noise = guided_DDIM_inversion(
+                        self.DDIM_noise, intermediates = guided_DDIM_inversion(
                             self.diffusion,
                             videos,
                             current_x0,
@@ -241,6 +208,9 @@ class ViewCrafter:
                             self.opts.ddim_eta,
                             self.opts.unconditional_guidance_scale,
                         )
+                    if self.opts.visualize_latents:
+                        with self.timer.time("visualize_latents"):
+                            visualize_latents(self.base_dir, intermediates["x_inter"], self.diffusion, "ddim")
 
         return torch.clamp(batch_samples[0][0].permute(1, 2, 3, 0), -1.0, 1.0)
 

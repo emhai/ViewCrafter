@@ -128,7 +128,7 @@ def guided_DDIM_inversion(model, videos, result, guidance_image, prompts, ddim_s
         "c_concat": [img_cat_cond]
     }
 
-    inverted_noise_run0, _ = ddim_sampler.ddim_inversion(
+    inverted_noise_run0, intermediates = ddim_sampler.ddim_inversion(
         x0=result,
         cond=cond_run0_nulltext,  # Invert with null point cloud
         ddim_steps=ddim_steps,
@@ -136,7 +136,7 @@ def guided_DDIM_inversion(model, videos, result, guidance_image, prompts, ddim_s
         unconditional_guidance_scale=unconditional_guidance_scale,
     )
 
-    return inverted_noise_run0
+    return inverted_noise_run0, intermediates
 
 def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddim_steps=50, ddim_eta=1., temperature=1.,
                            unconditional_guidance_scale=1.0, cfg_img=None, fs=None, text_input=False, multiple_cond_cfg=False,

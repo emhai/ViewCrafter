@@ -184,7 +184,7 @@ class DDIMSampler(object):
                 # Last step: pure noise
                 x_t = sqrt_one_minus_a_next * e_t
 
-            if i % 10 == 0 or i == total_steps - 1:
+            if i % 1 == 0 or i == total_steps - 1:
                 intermediates['x_inter'].append(x_t.clone())
 
         return x_t, intermediates

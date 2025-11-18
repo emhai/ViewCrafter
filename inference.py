@@ -61,11 +61,16 @@ if __name__=="__main__":
     times = timer.as_dict()
 
     t_dust3r = times.get("dust3r", 0.0)
-    t_diffusion = times.get("diffusion", 0.0)
     t_easi3r = times.get("easi3r", 0.0)
     t_ddim = times.get("ddim", 0.0)
     t_total = times.get("total", 0.0)
     t_metrics = times.get("metrics", 0.0)
+    t_visualize_latents = times.get("visualize_latents", 0.0)
+    t_diffusion = times.get("diffusion", 0.0)
+
+    t_total = t_total - t_visualize_latents # todo remove all visualizations?
+    t_diffusion = t_diffusion - t_visualize_latents
+
     t_misc = t_total - (t_diffusion + t_easi3r + t_ddim + t_dust3r + t_metrics)
 
     with timings_file.open("a", newline="") as f:

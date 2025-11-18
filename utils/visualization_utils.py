@@ -8,6 +8,10 @@ from PIL import Image
 from matplotlib import pyplot as plt
 
 import torch.nn.functional as F
+from torchvision.utils import save_image
+import torchvision.transforms.functional as TF
+
+from configs.v2v_config import LATENTS_DIR
 
 
 def visualize_camera_positions(models_json_path, plane="xy"):
@@ -380,6 +384,51 @@ def visualize_extrinsics_yaml(path):
     ax.view_init(elev=20, azim=-60)
     plt.show()
 
+def visualize_latents(base_dir, intermediates, model, prefix="x_inter"):
+    out_dir = base_dir / LATENTS_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    gif_frames = []  # store PIL images for the GIF
+
+    for i, x in enumerate(intermediates):
+        with torch.no_grad():
+            pixel = model.decode_first_stage(x)  # [B, C, T, H, W] or [B, C, H, W]
+
+        pixel = pixel[0].detach().cpu().float()  # -> [C, T, H, W] or [C, H, W]
+
+        if pixel.ndim == 4:
+            # [C, T, H, W] -> pick middle frame
+            C, T, H, W = pixel.shape
+            t_mid = T // 2
+            frame = pixel[:, t_mid]  # [C, H, W]
+        else:
+            frame = pixel  # [C, H, W]
+
+        # map (roughly) [-1, 1] or [0, 1] into [0, 1] for display
+        frame = (frame.clamp(-1, 1) + 1) / 2
+        frame = frame.clamp(0, 1)
+
+        print("pixel min/max:", pixel.min().item(), pixel.max().item())
+
+        # save PNG
+        png_path = out_dir / f"{prefix}_{i:03d}.png"
+        save_image(frame, png_path)
+
+        pil_img = TF.to_pil_image(frame)
+        gif_frames.append(pil_img)
+
+
+    duration_ms = 200
+    gif_path = out_dir / "latents.gif"
+    gif_frames[0].save(
+        gif_path,
+        save_all=True,
+        append_images=gif_frames[1:],
+        duration=duration_ms,
+        loop=0,
+    )
+    for img in gif_frames:
+            img.close()
 
 def main():
     path = "/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/SelfCap/corgi-release/optimized/extri.yml"
