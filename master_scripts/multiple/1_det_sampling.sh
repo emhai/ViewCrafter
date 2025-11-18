@@ -17,4 +17,5 @@ python inference.py \
 --model_path    ./checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth \
 --exp_name      det_sampling_EXP_NAME \
 --n_frames      NUMBER_FRAMES \
---set_position
+--set_position \
+--reuse_guidance_image
