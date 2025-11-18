@@ -1,6 +1,7 @@
 import sys
 
 from utils.mask_utils import create_frame_diff_masks, clean_mask
+from utils.metric_utils import run_metrics
 
 sys.path.append('./extern/dust3r')
 sys.path.append('./extern/mast3r')
@@ -25,15 +26,14 @@ from lvdm.models.samplers.ddim import DDIMSampler
 from lvdm.models.samplers.ddim_multiplecond import DDIMSampler as DDIMSampler_multicond
 from omegaconf import OmegaConf
 from pytorch_lightning import seed_everything
-from utils.diffusion_utils import instantiate_from_config, load_model_checkpoint, image_guided_synthesis, get_latent_z, \
-    guided_DDIM_inversion
+from utils.diffusion_utils import instantiate_from_config, load_model_checkpoint, image_guided_synthesis, guided_DDIM_inversion
 from pathlib import Path
 from torchvision.utils import save_image
 import time
 import pickle
 
 class ViewCrafter:
-    def __init__(self, opts, gradio = False):
+    def __init__(self, opts, timer, gradio = False):
         self.opts = opts
         self.device = opts.device
 
@@ -41,16 +41,17 @@ class ViewCrafter:
         if is_v2v:
 
             self.run_number = 0                 # which run currently
+            self.timer = timer                  # timer for result_csv file
             self.predicted_poses = None         # pred poses for dust3r with multiple cams
             self.predicted_focals = None        # pred focals for dust3r with multiple cams
             self.guidance_image = None          # cross-attention guidance. Set to first picture in first run
 
-            self.prev_image = None
-            self.prev_latents = None
-            self.first_image = None
-            self.first_latents = None
-            self.mask_type = MaskType[self.opts.mask_type.upper()].name
-            self.msa_type = MSAType[self.opts.msa.upper()].name if self.opts.msa is not None else None
+            self.prev_image = None              # for mask creation -> not used when easi3r mask
+            self.prev_latents = None            # for latent blending
+            self.first_image = None             # for mask creation -> not used when easi3r mask
+            self.first_latents = None           # for latent blending
+            self.mask_type = MaskType[self.opts.mask_type.upper()]
+            self.msa_type = MSAType[self.opts.msa.upper()] if self.opts.msa is not None else None
             self.radius = None                  # static radius to keep trajectory same even if point clouds differ
             self.DDIM_noise = None              # starting noise for subsequent runs - DDIM inversion
 
@@ -59,7 +60,8 @@ class ViewCrafter:
             self.base_dir = Path(self.opts.save_dir)
             setup_structure(self.base_dir, Path(self.opts.image_dir), Path(self.opts.gt_dir))
 
-            run_easi3r_from_viewcrafter(self.base_dir, self.opts.n_frames) # stores masks and pickles to folders
+            with self.timer.time("easi3r"):
+                run_easi3r_from_viewcrafter(self.base_dir, self.opts.n_frames) # stores masks and pickles to folders
 
         if self.opts.use_mast3r:
             self.setup_mast3r()
@@ -87,7 +89,7 @@ class ViewCrafter:
         mode = GlobalAlignerMode.PointCloudOptimizer #if len(self.images) > 2 else GlobalAlignerMode.PairViewer
         scene = global_aligner(output, device=self.device, mode=mode)
 
-        if self.predicted_poses is not None:
+        if self.opts.set_position and self.predicted_poses is not None:
             print("Found predicted camera poses")
             scene.preset_pose(self.predicted_poses)
             scene.preset_focal(self.predicted_focals)
@@ -98,7 +100,7 @@ class ViewCrafter:
         if mode == GlobalAlignerMode.PointCloudOptimizer:
             loss = scene.compute_global_alignment(init=init_string, niter=self.opts.niter, schedule=self.opts.schedule, lr=self.opts.lr)
 
-        if self.predicted_poses is None:
+        if self.opts.set_position and self.predicted_poses is None:
             print("Saving predicted camera poses")
             self.predicted_poses = scene.get_im_poses().detach().cpu()
             self.predicted_focals = scene.get_focals().detach().cpu()
@@ -142,69 +144,86 @@ class ViewCrafter:
     def run_diffusion(self, renderings, masks=None):
 
         prompts = [self.opts.prompt]
-        videos = (renderings * 2. - 1.).permute(3,0,1,2).unsqueeze(0).to(self.device)
+        videos = (renderings * 2.0 - 1.0).permute(3, 0, 1, 2).unsqueeze(0).to(self.device)
         condition_index = [0]
 
-        if self.mask_type in [MaskType.COMP_WITH_PREV, MaskType.EASI3R_PREV]:
-            latents = self.prev_latents
-        elif self.mask_type in [MaskType.COMP_WITH_FIRST, MaskType.EASI3R_FIRST]:
-            latents = self.first_latents
-        else:
-            latents = None
+        masks = None
+        latents = None
+
+        if self.opts.use_latent_blending:
+            if self.mask_type in [MaskType.COMP_WITH_PREV, MaskType.EASI3R_PREV]:
+                latents = self.prev_latents
+            elif self.mask_type in [MaskType.COMP_WITH_FIRST, MaskType.EASI3R_FIRST]:
+                latents = self.first_latents
+
+        guidance_image = self.guidance_image if self.opts.reuse_guidance_image else None
 
         with torch.no_grad(), torch.cuda.amp.autocast():
-            # [1,1,c,t,h,w]
-            # Original image_guided_synthesis
-            # batch_samples, current_x0 = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps,
-            #                                        self.opts.ddim_eta, self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride,
-            #                                        self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale,
-            #                                        condition_index, guidance_image=None, latent=None, mask=None, ddim_sampler=self.ddim_sampler)
-
-            batch_samples, current_x0, intermediates = image_guided_synthesis(self.diffusion,
-                                                                              prompts,
-                                                                              videos,
-                                                                              self.noise_shape,
-                                                                              self.opts.n_samples,
-                                                                              self.opts.ddim_steps,
-                                                                              self.opts.ddim_eta,
-                                                                              self.opts.unconditional_guidance_scale,
-                                                                              self.opts.cfg_img,
-                                                                              self.opts.frame_stride,
-                                                                              self.opts.text_input,
-                                                                              self.opts.multiple_cond_cfg,
-                                                                              self.opts.timestep_spacing,
-                                                                              self.opts.guidance_rescale,
-                                                                              condition_index,
-                                                                              guidance_image=None,
-                                                                              latents=latents,
-                                                                              only_x0 = False,
-                                                                              mask=masks,
-                                                                              x_T=self.DDIM_noise,
-                                                                              ddim_sampler=self.ddim_sampler,
-                                                                              msa=self.msa_type)
+            batch_samples, current_x0, intermediates = image_guided_synthesis(
+                                                                            self.diffusion,
+                                                                            prompts,
+                                                                            videos,
+                                                                            self.noise_shape,
+                                                                            self.opts.n_samples,
+                                                                            self.opts.ddim_steps,
+                                                                            self.opts.ddim_eta,
+                                                                            self.opts.temperature,
+                                                                            self.opts.unconditional_guidance_scale,
+                                                                            self.opts.cfg_img,
+                                                                            self.opts.frame_stride,
+                                                                            self.opts.text_input,
+                                                                            self.opts.multiple_cond_cfg,
+                                                                            self.opts.timestep_spacing,
+                                                                            self.opts.guidance_rescale,
+                                                                            condition_index,
+                                                                            guidance_image=guidance_image,
+                                                                            latents=latents,
+                                                                            only_x0=False,
+                                                                            mask=masks,
+                                                                            x_T=self.DDIM_noise,
+                                                                            ddim_sampler=self.ddim_sampler,
+                                                                            msa=self.msa_type,
+            )
 
             self.prev_latents = intermediates
             self.ddim_sampler.first_run = False
 
             if self.run_number == 0:
+                if self.opts.visualize_latents:
+                    out_dir = self.base_dir / LATENTS_DIR
+                    out_dir.mkdir(parents=True, exist_ok=True)
+                    vmin, vmax = (-1, 1)
+
+                    for i, x in enumerate(intermediates):
+                        pixel_space_latent = self.diffusion.decode_first_stage(x)
+                        # x: [B, C, H, W], take first in batch for debugging
+                        img = pixel_space_latent[0].detach().cpu()
+
+                        # normalize from [-1,1] -> [0,1] (if needed)
+                        if (vmin, vmax) == (-1, 1):
+                            img = (img.clamp(-1, 1) + 1) / 2
+                        elif (vmin, vmax) != (0, 1):
+                            img = (img - vmin) / (vmax - vmin)
+
+                        save_image(img, out_dir / f"x_inter_{i:03d}.png")
+
                 self.first_latents = intermediates
-                result = intermediates[-1]
-                test = result == current_x0
 
-                self.DDIM_noise = guided_DDIM_inversion(self.diffusion,
-                                      videos,
-                                      result,
-                                      self.guidance_image,
-                                      prompts,
-                                      self.ddim_sampler,
-                                      self.opts.ddim_steps,
-                                      self.opts.ddim_eta,
-                                      self.opts.unconditional_guidance_scale
-                                      )
+                if self.opts.use_ddim_inversion:
+                    with self.timer.time("ddim"):
+                        self.DDIM_noise = guided_DDIM_inversion(
+                            self.diffusion,
+                            videos,
+                            current_x0,
+                            self.guidance_image,
+                            prompts,
+                            self.ddim_sampler,
+                            self.opts.ddim_steps,
+                            self.opts.ddim_eta,
+                            self.opts.unconditional_guidance_scale,
+                        )
 
-
-
-        return torch.clamp(batch_samples[0][0].permute(1,2,3,0), -1., 1.)
+        return torch.clamp(batch_samples[0][0].permute(1, 2, 3, 0), -1.0, 1.0)
 
     def complete_mask_creation(self, point_cloud, images, height, width, trajectory, no_views):
 
@@ -494,7 +513,9 @@ class ViewCrafter:
 
         latent_masks = self.complete_mask_creation([pcd[-1]], [imgs[-1]], H, W, camera_traj, num_views)
 
-        diffusion_results = self.run_diffusion(render_results, latent_masks)
+        with self.timer.time("diffusion"):
+            diffusion_results = self.run_diffusion(render_results, latent_masks)
+
         save_video((diffusion_results + 1.0) / 2.0, os.path.join(self.opts.save_dir, 'diffusion.mp4'),
                    os.path.join(self.opts.save_dir, DIFFUSION_FRAMES))
         return diffusion_results
@@ -659,7 +680,8 @@ class ViewCrafter:
 
         latent_masks = self.complete_mask_creation(pcd, imgs, H, W, camera_traj, num_views)
 
-        diffusion_results = self.run_diffusion(render_results, latent_masks)
+        with self.timer.time("diffusion"):
+            diffusion_results = self.run_diffusion(render_results, latent_masks)
 
         save_video((diffusion_results + 1.0) / 2.0, os.path.join(self.opts.save_dir, f'diffusion.mp4'),
                    os.path.join(self.opts.save_dir, DIFFUSION_FRAMES))
@@ -800,11 +822,13 @@ class ViewCrafter:
             if mode == "single":
                 self.images, self.img_ori = self.load_initial_images(image_dir=self.opts.image_dir)
                 if not self.opts.use_easi3r or dir_empty(self.base_dir / PICKLES_DIR):
-                    self.run_dust3r(input_images=self.images)
+                    with self.timer.time("dust3r"):
+                        self.run_dust3r(input_images=self.images)
 
             else: # mode == "multi"
                 self.images, self.img_ori = self.load_initial_dir(image_dir=self.opts.image_dir)
-                self.run_dust3r(input_images=self.images, clean_pc=True) # if single, pc is from easi3r
+                with self.timer.time("dust3r"):
+                    self.run_dust3r(input_images=self.images, clean_pc=True) # if single, pc is from easi3r
 
             if self.run_number == 0:
                 self.first_image = self.img_ori
@@ -821,25 +845,15 @@ class ViewCrafter:
             time_per_frame = (end - start) / 60
             remaining_time = time_per_frame * (len(all_frames) - int(frame) - 1)
             print("elapsed time: {:.2f}min, est.remaining time: {:.2f}min, {:.2f}h\n".format(time_per_frame,
-                                                                                             remaining_time,
-                                                                                             remaining_time / 60))
+                                                                            remaining_time, remaining_time / 60))
             self.run_number += 1
 
-        separate_cameras(results_dir, cameras_dir, DIFFUSION_FRAMES)
-        separate_cameras(results_dir, cameras_dir, RENDER_FRAMES)
+        separate_cameras(self.base_dir, DIFFUSION_FRAMES)
+        separate_cameras(self.base_dir, RENDER_FRAMES)
 
-        setup_4dgs_from_viewcrafter(cameras_dir, self.opts.exp_name)
+        with self.timer.time("metrics"):
+            run_metrics(self.base_dir)
 
-        original_exp_name = "original_" + self.opts.exp_name
-        setup_4dgs_from_videos(self.base_dir / SHORT_VIDEOS_DIR, original_exp_name)
-
-        torch.cuda.synchronize()  # finish kernels
-        torch.cuda.empty_cache()  # release cached blocks to the driver
-        torch.cuda.ipc_collect()  # clean IPC memory
-        del self.diffusion # todo, works?
-
-        run_4dgs(self.opts.exp_name)
-        run_4dgs(original_exp_name)
 
     def setup_diffusion(self):
         seed_everything(self.opts.seed)
@@ -859,7 +873,7 @@ class ViewCrafter:
         model.eval()
         self.diffusion = model
 
-        # print_diffusion_model(model, max_depth=7)
+        print_diffusion_model(model, max_depth=7)
 
         h, w = self.opts.height // 8, self.opts.width // 8 # latent size
         channels = model.model.diffusion_model.out_channels

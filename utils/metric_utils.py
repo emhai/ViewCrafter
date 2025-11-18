@@ -1,6 +1,7 @@
 import argparse
 import os
 import warnings
+from pathlib import Path
 
 from skimage.metrics import structural_similarity
 from math import log10, sqrt
@@ -11,6 +12,8 @@ from pytorch_fid.fid_score import calculate_fid_given_paths
 import lpips
 from cdfvd import fvd
 from fvmd import fvmd
+
+from configs.v2v_config import GROUND_TRUTH_FRAMES_DIR, GENERATED_FRAMES_DIR
 
 """ 
 ==============================================
@@ -149,6 +152,85 @@ def KVD(original_path, synthesized_path):
     pass
     # todo, laut chatgpt only nice to have
 
+
+def evaluate_frame_dirs(gt_dir, cand_dir, max_frames=None, stride=1):
+    gt_frames = sorted(gt_dir.iterdir(), key=lambda p: p.name)
+    cand_frames = sorted(cand_dir.iterdir(), key=lambda p: p.name)
+
+    num_pairs = min(len(gt_frames), len(cand_frames))
+    gt_frames = gt_frames[:num_pairs]
+    cand_frames = cand_frames[:num_pairs]
+
+    assert gt_frames and cand_frames
+    assert len(gt_frames) == len(cand_frames)
+
+    num_pairs = len(gt_frames)
+    psnrs = []
+    ssims = []
+
+    for i in range(0, num_pairs, stride):
+        if max_frames is not None and len(psnrs) >= max_frames:
+            break
+
+        gt_path = gt_frames[i]
+        cand_path = cand_frames[i]
+
+        psnrs.append(PSNR(gt_path, cand_path))
+        ssims.append(SSIM(gt_path, cand_path))
+
+
+    psnrs = np.array(psnrs, dtype=np.float32)
+    ssims = np.array(ssims, dtype=np.float32)
+
+    return {
+        "candidate_dir": str(cand_dir),
+        "num_frames": int(len(psnrs)),
+        "psnr_mean": float(psnrs.mean()),
+        "psnr_std": float(psnrs.std()),
+        "ssim_mean": float(ssims.mean()),
+        "ssim_std": float(ssims.std()),
+    }
+
+def pick_best_candidate(gt_frames_dir, candidate_frame_dirs, max_frames=None, stride=1):
+
+    results = []
+    for candidate in candidate_frame_dirs.iterdir():
+        metrics = evaluate_frame_dirs(
+            gt_frames_dir,
+            candidate,
+            max_frames=max_frames,
+            stride=stride,
+        )
+        results.append(metrics)
+
+    # sort best-first by SSIM then PSNR
+    results.sort(key=lambda m: (m["ssim_mean"], m["psnr_mean"]), reverse=True)
+    return results
+
+def run_metrics(base_dir):
+    gt_dir = base_dir / GROUND_TRUTH_FRAMES_DIR
+    generated_dir = base_dir / GENERATED_FRAMES_DIR
+
+    for ground_truth_frame in gt_dir.iterdir():
+
+        ranking = pick_best_candidate(
+            ground_truth_frame,
+            generated_dir,
+            max_frames=10,
+            stride=10,
+        )
+
+        for r in ranking:
+            print(
+                r["candidate_dir"],
+                "frames:", r["num_frames"],
+                "PSNR:", r["psnr_mean"],
+                "SSIM:", r["ssim_mean"],
+            )
+
+        best = ranking[0]
+        print(f"Best candidate (frames) for gt {ground_truth_frame.name}: {best['candidate_dir']}")
+
 def run(original_path, synthesized_path):
     warnings.filterwarnings("ignore", category=UserWarning) # in torchvision "Arguments other than a weight enum ... deprecated"
     warnings.filterwarnings("ignore", category=FutureWarning) # in lpips "You are using torch.load with weights_onl=False ... deprecated"
@@ -165,8 +247,10 @@ def main():
     original_path = ""
     synthesized_path = ""
 
-    run(original_path, synthesized_path)
+    # run(original_path, synthesized_path)
 
+    base_path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/20251118_1355_spinach_2_metrics")
+    run_metrics(base_path)
 
 if __name__ == "__main__":
     main()

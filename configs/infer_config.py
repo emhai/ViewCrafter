@@ -27,12 +27,12 @@ def get_parser():
     parser.add_argument('--bg_trd',  type=float, default=0., help='Required for mulitpule reference images and iterative mode, set to 0. is no mask')
     parser.add_argument('--dpt_trd',  type=float, default=1., help='Required for mulitpule reference images and iterative mode, limit the max depth by * dpt_trd')
 
-
     ## diffusion
     parser.add_argument("--ckpt_path", type=str, default='./checkpoints/model.ckpt', help="checkpoint path")
     parser.add_argument("--config", type=str, default='./configs/inference_pvd_1024.yaml', help="config (yaml) path")
     parser.add_argument("--ddim_steps", type=int, default=50, help="steps of ddim if positive, otherwise use DDPM, reduce to 10 to speed up inference")
     parser.add_argument("--ddim_eta", type=float, default=1.0, help="eta for ddim sampling (0.0 yields deterministic sampling)")
+    parser.add_argument("--temperature", type=float, default=1.0, help="temperature for ddim sampling (0.0 yields more deterministic sampling)")
     parser.add_argument("--bs", type=int, default=1, help="batch size for inference, should be one")
     parser.add_argument("--height", type=int, default=576, help="image height, in pixel space")
     parser.add_argument("--width", type=int, default=1024, help="image width, in pixel space")
@@ -65,9 +65,12 @@ def get_parser():
 
     parser.add_argument("--use_ddim_inversion", action='store_true', default=False, help="use DDIM inversed noise from first run as starting noise")
     parser.add_argument("--use_latent_blending", action='store_true', default=False, help="use latent masked blending")
-    parser.add_argument("--gt_dir", type=str, default="", help="Path to ground truth videos")
-    parser.add_argument("--mask_type", choices=[m.name.lower() for m in MaskType], default="comp_with_prev")
-    parser.add_argument("--msa", choices=[m.name.lower() for m in MSAType], default=None)
+    parser.add_argument("--reuse_guidance_image", action='store_true', default=False, help="reuse the guidance image from first run")
+    parser.add_argument("--set_position", action='store_true', default=False, help="set fixed position in dust3r with multiview cameras")
 
+    parser.add_argument("--gt_dir", type=str, default=None, help="Path to ground truth videos")
+    parser.add_argument("--mask_type", choices=[m.name.lower() for m in MaskType], default="easi3r_prev")
+    parser.add_argument("--msa", choices=[m.name.lower() for m in MSAType], default=None)
+    parser.add_argument("--visualize_latents", action='store_true', default=False, help="save images of latents")
 
     return parser

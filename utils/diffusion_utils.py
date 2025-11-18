@@ -138,7 +138,7 @@ def guided_DDIM_inversion(model, videos, result, guidance_image, prompts, ddim_s
 
     return inverted_noise_run0
 
-def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddim_steps=50, ddim_eta=1.,
+def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddim_steps=50, ddim_eta=1., temperature=1.,
                            unconditional_guidance_scale=1.0, cfg_img=None, fs=None, text_input=False, multiple_cond_cfg=False,
                            timestep_spacing='uniform', guidance_rescale=0.0, condition_index=None, guidance_image=None,
                             latents=None, only_x0 = False, mask=None, x_T=None, ddim_sampler=None, msa=None, **kwargs):
@@ -230,6 +230,7 @@ def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddi
                                             log_every_t=1,                              # log *every* intermediate latent
                                             x_T=x_T,                                    # DDIM inversion noise
                                             msa=msa,
+                                            temperature=temperature,
                                             **kwargs
                                             )
 

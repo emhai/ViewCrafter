@@ -10,7 +10,6 @@ from configs.v2v_config import DIFFUSION_FRAMES
 
 PATH_TO_4DGS = Path("/home/emmahaidacher/Desktop/4DGaussians")
 
-
 def run_command(cmd):
     cmd = shlex.split(cmd)
     proc = subprocess.run(cmd, capture_output=True, text=True, cwd=PATH_TO_4DGS)
@@ -143,6 +142,20 @@ def rename_frames_from_number(folder):
     for p in files:
         num = int(p.stem)
         p.rename(p.with_name(f"frame_{num:05}.jpg"))
+
+def test_4dgs_after_complete_run(cameras_dir, exp_name, ):
+     setup_4dgs_from_viewcrafter(cameras_dir, exp_name)
+#
+    # original_exp_name = "original_" + exp_name
+    # setup_4dgs_from_videos(self.base_dir / ORIGINAL_VIDEOS_DIR, original_exp_name)
+#
+    # torch.cuda.synchronize()  # finish kernels
+    # torch.cuda.empty_cache()  # release cached blocks to the driver
+    # torch.cuda.ipc_collect()  # clean IPC memory
+    # del self.diffusion  # todo, works?
+#
+    # run_4dgs(self.opts.exp_name)
+    # run_4dgs(original_exp_name)
 
 def main():
     # vcpath = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/yoga/cameras/")

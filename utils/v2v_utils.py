@@ -1,9 +1,58 @@
+import csv
 import shutil
 import subprocess
 import cv2
 import numpy as np
 from pathlib import Path
 from configs.v2v_config import *
+
+def init_results_file(base_dir):
+    results_file = base_dir / RESULTS_CSV_FILE
+
+    if not results_file.exists():
+        with results_file.open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(
+                [
+                    "dataset",      # dataset name
+                    "mode",
+                    "exp_name",     # dataset_script
+                    "frames",
+                    "no_input_videos",
+                    "no_output_videos",
+                    "returncode",   # subprocess return code
+                    "t_total",      # wall-clock runtime
+                    "t_easi3r",
+                    "t_ddim",
+                    "t_dust3r",
+                    "t_misc",
+                    "PSNR",
+                    "SSIM",
+                    "LPIPS"
+                ]
+            )
+    return results_file
+
+def init_timings_file(base_dir):
+    timings_file = base_dir / TIMINGS_CSV_FILE
+
+    if not timings_file.exists():
+        with timings_file.open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(
+                [
+                    "exp_name",
+                    "frames",
+                    "t_total",      # wall-clock runtime
+                    "t_easi3r",
+                    "t_ddim",
+                    "t_dust3r",
+                    "t_metrics",
+                    "t_misc"
+                ]
+            )
+
+    return timings_file
 
 def dir_empty(dir_path):
      path = Path(dir_path)
@@ -35,6 +84,8 @@ def setup_structure(save_path, source_path, gt_path):
     og_frames_path = save_path / ORIGINAL_FRAMES_DIR
     gt_videos_path = save_path / GROUND_TRUTH_VIDEOS_DIR
     gt_frames_path = save_path / GROUND_TRUTH_FRAMES_DIR
+    rnd_videos_path = save_path / RENDERED_VIDEOS_DIR
+    rnd_frames_path = save_path / RENDERED_FRAMES_DIR
 
     all_folders = [og_videos_path,
                    og_frames_path,
@@ -42,11 +93,13 @@ def setup_structure(save_path, source_path, gt_path):
                    gen_frames_path,
                    gt_videos_path,
                    gt_frames_path,
+                   rnd_videos_path,
+                   rnd_frames_path,
                    inputs_path,
                    results_path]
 
     create_folder_structure(all_folders)
-
+    init_results_file(save_path)
     # copy video folder
     for og_video in source_path.iterdir():
         target_video_path = og_videos_path / og_video.name
@@ -56,12 +109,13 @@ def setup_structure(save_path, source_path, gt_path):
         extract_frames(og_video, frames_path)
 
     # copy ground truths folder
-    for gt_video in gt_path.iterdir():
-        target_video_path = gt_videos_path / gt_video.name
-        shutil.copy(gt_video, target_video_path)
-        frames_path = gt_frames_path / gt_video.stem
-        frames_path.mkdir(exist_ok=True)
-        extract_frames(gt_video, frames_path)
+    if gt_path is not None:
+        for gt_video in gt_path.iterdir():
+            target_video_path = gt_videos_path / gt_video.name
+            shutil.copy(gt_video, target_video_path)
+            frames_path = gt_frames_path / gt_video.stem
+            frames_path.mkdir(exist_ok=True)
+            extract_frames(gt_video, frames_path)
 
     frame_folders = sorted(og_frames_path.iterdir())
     frame_files = [sorted(files.iterdir()) for files in frame_folders]
@@ -80,12 +134,11 @@ def setup_structure(save_path, source_path, gt_path):
 
     print("Folder Setup Completed!")
 
-def create_video(input_folder):
+def create_video(input_folder, output_folder):
 
     camera_name = input_folder.stem
-    camera_dir = input_folder.parent
     video_name = f"{camera_name}.mp4"
-    video_path = str(camera_dir / video_name)
+    video_path = str(output_folder / video_name)
 
     images = sorted(input_folder.iterdir(), key=lambda x: int(x.stem.split("_")[-1]))
 
@@ -105,7 +158,18 @@ def create_video(input_folder):
     video.release()
     cv2.destroyAllWindows()
 
-def separate_cameras(results_folder, all_cameras_folder, frame_type):
+def separate_cameras(base_dir, frame_type):
+
+    results_folder = base_dir / RESULTS_DIR
+    if frame_type == DIFFUSION_FRAMES:
+        output_frames_folder = base_dir / GENERATED_FRAMES_DIR
+        output_videos_folder = base_dir / GENERATED_VIDEOS_DIR
+    elif frame_type == RENDER_FRAMES:
+        output_frames_folder = base_dir / RENDERED_FRAMES_DIR
+        output_videos_folder = base_dir / RENDERED_VIDEOS_DIR
+    else:
+        print("FAILED")
+        return
 
     for frame_number in results_folder.iterdir(): # 1 folder in results equal to 1 frame with n synthesized cameras
         if not frame_number.is_dir():
@@ -116,7 +180,7 @@ def separate_cameras(results_folder, all_cameras_folder, frame_type):
             cam_name = int(camera.stem.split("_")[1]) # starts at frame_0001 -> 1 -> cam01
             frame_name = int(frame_number.stem) + 1 # starts at results 0 -> 1 -> frame_00001
 
-            camera_folder_name = all_cameras_folder / frame_type / f"cam{cam_name:02}" # 4DGS standard
+            camera_folder_name = output_frames_folder / f"cam{cam_name:02}" # 4DGS standard
             #print(name_folder, "--", file_name)
             if not camera_folder_name.exists():
                 camera_folder_name.mkdir(parents=True)
@@ -126,8 +190,8 @@ def separate_cameras(results_folder, all_cameras_folder, frame_type):
             shutil.copyfile(str(camera), dst) # 4DGS standard
 
     print("Creating Videos")
-    for all_frames_folder in (all_cameras_folder / frame_type).iterdir():
-        create_video(all_frames_folder)
+    for all_frames_folder in output_frames_folder.iterdir():
+        create_video(all_frames_folder, output_videos_folder)
 
 # https://learnopencv.com/simple-background-estimation-in-videos-using-opencv-c-python/
 def estimate_background(video):

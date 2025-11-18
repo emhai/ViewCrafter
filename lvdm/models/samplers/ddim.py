@@ -306,9 +306,11 @@ class DDIMSampler(object):
 
 
         if msa == MSAType.MASACTRL:
-            msa_tracker = MSATracker(start_step=4, start_layer=10)  # from MasaCtrl
+            msa_tracker = MSATracker(start_step=4, start_layer=10) # from MasaCtrl
         elif msa == MSAType.PIX_2_VIDEO:
             msa_tracker = MSATracker(start_step=0, start_layer=7) # from Pix2Video
+        elif msa == MSAType.ALL:
+            msa_tracker = MSATracker(start_step=0, start_layer=0) # all steps and layers
         else:
             msa_tracker = None
 
@@ -355,6 +357,7 @@ class DDIMSampler(object):
 
         return img, intermediates
 
+
     @torch.no_grad()
     def p_sample_ddim(self, x, c, t, index, repeat_noise=False, use_original_steps=False, quantize_denoised=False,
                       temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None,
@@ -368,10 +371,10 @@ class DDIMSampler(object):
             is_video = False
 
         if unconditional_conditioning is None or unconditional_guidance_scale == 1.:
+
             if msa_tracker is None:
                 model_output = self.model.apply_model(x, t, c, **kwargs)  # unet denoiser
             else:
-
                 sa_collect = [] if self.first_run else None
                 sa_inject = self.all_sa_collect_cond[msa_tracker.cur_step].copy() if not self.first_run else None
                 assert sa_collect is None or sa_inject is None, "cant have both"
@@ -461,7 +464,7 @@ class DDIMSampler(object):
         if quantize_denoised:
             pred_x0, _, *_ = self.model.first_stage_model.quantize(pred_x0)
         # direction pointing to x_t
-        dir_xt = (1. - a_prev - sigma_t**2).sqrt() * e_t
+        dir_xt = (1. - a_prev - sigma_t ** 2).sqrt() * e_t
 
         noise = sigma_t * noise_like(x.shape, device, repeat_noise) * temperature
         if noise_dropout > 0.:
