@@ -388,7 +388,7 @@ def visualize_latents(base_dir, intermediates, model, prefix="x_inter"):
     out_dir = base_dir / LATENTS_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    gif_frames = []  # store PIL images for the GIF
+    gif_frames = []
 
     for i, x in enumerate(intermediates):
         with torch.no_grad():
@@ -404,27 +404,23 @@ def visualize_latents(base_dir, intermediates, model, prefix="x_inter"):
         else:
             frame = pixel  # [C, H, W]
 
-        # map (roughly) [-1, 1] or [0, 1] into [0, 1] for display
-        frame = (frame.clamp(-1, 1) + 1) / 2
-        frame = frame.clamp(0, 1)
-
-        print("pixel min/max:", pixel.min().item(), pixel.max().item())
-
-        # save PNG
-        png_path = out_dir / f"{prefix}_{i:03d}.png"
-        save_image(frame, png_path)
+        f_min = frame.min()
+        f_max = frame.max()
+        denom = (f_max - f_min).clamp(min=1e-8)
+        frame_norm = (frame - f_min) / denom  # in [0, 1]
+        save_image(frame_norm, out_dir / f"{prefix}_{i:03d}.png")
 
         pil_img = TF.to_pil_image(frame)
         gif_frames.append(pil_img)
 
 
-    duration_ms = 200
-    gif_path = out_dir / "latents.gif"
-    gif_frames[0].save(
+    rgb_images = [img.convert('RGB') for img in gif_frames]
+    gif_path = out_dir / f"{prefix}_latents.gif"
+    rgb_images[0].save(
         gif_path,
         save_all=True,
         append_images=gif_frames[1:],
-        duration=duration_ms,
+        duration=4,
         loop=0,
     )
     for img in gif_frames:
@@ -434,5 +430,6 @@ def main():
     path = "/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/SelfCap/corgi-release/optimized/extri.yml"
     # visualize_extrinsics_yaml(path)
     visualize_camera_positions(Path("/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/06_Goats/models.json"))
+    
 if __name__ == '__main__':
     main()

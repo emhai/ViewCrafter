@@ -65,11 +65,11 @@ if __name__=="__main__":
     t_ddim = times.get("ddim", 0.0)
     t_total = times.get("total", 0.0)
     t_metrics = times.get("metrics", 0.0)
-    t_visualize_latents = times.get("visualize_latents", 0.0)
+    t_visualize = times.get("visualize", 0.0)
     t_diffusion = times.get("diffusion", 0.0)
 
-    t_total = t_total - t_visualize_latents # todo remove all visualizations?
-    t_diffusion = t_diffusion - t_visualize_latents
+    t_total = t_total - t_visualize # todo remove all visualizations?
+    t_diffusion = t_diffusion - t_visualize
 
     t_misc = t_total - (t_diffusion + t_easi3r + t_ddim + t_dust3r + t_metrics)
 
@@ -82,7 +82,7 @@ if __name__=="__main__":
             f"{t_easi3r:.3f}",
             f"{t_ddim:.3f}",
             f"{t_dust3r:.3f}",
-            f"{t_diffusion:.3f},"
+            f"{t_diffusion:.3f}",
             f"{t_metrics:.3f}",
             f"{t_misc:.3f}",
         ])

@@ -212,7 +212,7 @@ def clean_empty_camera_folders():
     for sub in base_folder.iterdir():
         if not sub.is_dir():
             continue
-        cameras = sub / "cameras"
+        cameras = sub / GENERATED_VIDEOS_DIR
         if cameras.exists() and cameras.is_dir():
             if not any(cameras.iterdir()):  # cameras folder is empty
                 print(f"Deleting {sub} (empty cameras folder)")
