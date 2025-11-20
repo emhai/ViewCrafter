@@ -1,4 +1,5 @@
 import csv
+import json
 import warnings
 from pathlib import Path
 
@@ -13,7 +14,8 @@ from cdfvd import fvd
 from fvmd import fvmd
 
 from configs.v2v_config import *
-from utils.v2v_utils import init_results_file, ffmpeg_side_by_side_vid, init_tot_results_file
+from local_utils.v2v_utils import init_results_file, ffmpeg_side_by_side_vid, init_tot_results_file
+from vbench import VBench
 
 """ 
 ==============================================
@@ -152,11 +154,12 @@ def calc_fid(original_path, synthesized_path):
 # https://content-debiased-fvd.github.io/documentation/
 # https://github.com/songweige/content-debiased-fvd
 def calc_fvd(original_path, synthesized_path):
-    evaluator = fvd.cdfvd('i3d', ckpt_path=None)
+    evaluator = fvd.cdfvd('videomae', ckpt_path=None, device='cuda')
 
     evaluator.compute_real_stats(evaluator.load_videos(str(original_path), data_type="video_folder"))
     evaluator.compute_fake_stats(evaluator.load_videos(str(synthesized_path),  data_type="video_folder"))
     score = evaluator.compute_fvd_from_stats()
+    print(score)
 
     return score
 
@@ -178,6 +181,27 @@ def calc_fvmd(original_path, synthesized_path, log_path):
     gt_path=str(original_path))
 
     return fvmd_value
+
+def calc_vbench(base_dir, synthesized_path):
+
+    prompts = ['subject_consistency', 'background_consistency', 'temporal_flickering',
+               'motion_smoothness', 'dynamic_degree', 'aesthetic_quality', 'imaging_quality']
+
+    my_VBench = VBench(device="cuda", full_info_dir=None, output_path=base_dir / MISC_DIR)
+    my_VBench.evaluate(videos_path=synthesized_path, name="vbench", mode="custom_input", dimension_list=prompts)
+
+    json_path = base_dir / MISC_DIR / "vbench_eval_results.json"
+
+    with json_path.open("r") as f:
+        data = json.load(f)
+
+    metrics = []
+    for metric_name, value_list in data.items():
+        result = f"{value_list[0]:.3f}"
+        metrics.append(result)
+
+    return metrics
+
 
 # https://content-debiased-fvd.github.io/documentation/
 # https://github.com/songweige/content-debiased-fvd
@@ -278,26 +302,24 @@ def run_metrics(base_dir):
         print(f"Best candidate (frames) for gt {ground_truth_frame.name}: {best}")
 
         gt_name = ground_truth_frame.name
-        gen_name = Path(best).name
+        best_candidate = Path(best)
 
-        psnr = calc_psnr_video(ground_truth_frame, Path(best))
-        ssim = calc_ssim_video(ground_truth_frame, Path(best))
-        lpips = calc_lpips_video(ground_truth_frame, Path(best))
-        fid = calc_fid(ground_truth_frame, Path(best))
-        # fvd = FVD(gt_videos_dir, gen_videos_dir) --> add to csv if uncomment
+        psnr = calc_psnr_video(ground_truth_frame, best_candidate)
+        ssim = calc_ssim_video(ground_truth_frame, best_candidate)
+        lpips = calc_lpips_video(ground_truth_frame, best_candidate)
+        fid = calc_fid(ground_truth_frame, best_candidate)
 
         total_psnr.append(psnr)
         total_ssim.append(ssim)
         total_lpips.append(lpips)
         total_fid.append(fid)
-        # total_fvd.append(fvd)
 
         with results_file.open("a", newline="") as f:
             writer = csv.writer(f)
             writer.writerow([
                 base_dir.name,
                 ground_truth_frame.name,
-                Path(best).name,
+                best_candidate.name,
                 f"{psnr:.3f}",
                 f"{ssim:.3f}",
                 f"{lpips:.3f}",
@@ -305,8 +327,15 @@ def run_metrics(base_dir):
             ])
 
         gt_video = base_dir / GROUND_TRUTH_VIDEOS_DIR / f"{gt_name}.mp4"
-        gen_video = base_dir / GENERATED_VIDEOS_DIR / f"{gen_name}.mp4"
-        ffmpeg_side_by_side_vid(gt_video, gen_video, base_dir / VIS_RESULTS_DIR / f"{gt_name}_{gen_name}.mp4")
+        gen_video = base_dir / GENERATED_VIDEOS_DIR / f"{best_candidate.name}.mp4"
+        ffmpeg_side_by_side_vid(gt_video, gen_video, base_dir / VIS_RESULTS_DIR / f"{gt_name}_{best_candidate.name}.mp4")
+
+    # calculate only once over all videos (distribution)
+    fvd = 0 # calc_fvd(base_dir / GROUND_TRUTH_VIDEOS_DIR, base_dir / GENERATED_VIDEOS_DIR)  # todo --> add to csv if uncomment
+
+    fvmd = 0 # calc_fvmd(base_dir / GROUND_TRUTH_FRAMES_DIR, base_dir / GENERATED_FRAMES_DIR, base_dir / MISC_DIR)
+
+    vbench = calc_vbench(base_dir, base_dir / GENERATED_VIDEOS_DIR)
 
     with total_results_file.open("a", newline="") as f:
         writer = csv.writer(f)
@@ -315,7 +344,10 @@ def run_metrics(base_dir):
             f"{np.mean(total_psnr):.3f}",
             f"{np.mean(total_ssim):.3f}",
             f"{np.mean(total_lpips):.3f}",
-            f"{np.mean(total_fid):.3f}"
+            f"{np.mean(total_fid):.3f}",
+            f"{fvd:.3f}",
+            f"{fvmd:.3f}",
+            *vbench
         ])
 
 def run(original_path, synthesized_path):
@@ -329,6 +361,19 @@ def run(original_path, synthesized_path):
     # print(f"For files {original_name}, {synthesized_name}: PSNR: {psnr:.3f}, SSIM: {ssim:.3f}, LPIPS: {lpips:.3f}")
     return lpips, psnr, ssim
 
+def rerun_metrics(results_dir):
+
+    for dir in results_dir.iterdir():
+        result_file = dir / RESULTS_CSV_FILE
+        tot_result_file = dir / TOT_RESULTS_CSV_FILE
+        if result_file.exists():
+            result_file.unlink()
+        if tot_result_file.exists():
+            tot_result_file.unlink()
+
+        run_metrics(dir)
+
+
 def main():
 
     original_path = ""
@@ -336,8 +381,10 @@ def main():
 
     # run(original_path, synthesized_path)
 
-    base_path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/20251118_1507_spinach_2_metrics")
-    run_metrics(base_path)
+    base_path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/test_metrix")
+    rerun_path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/rerun_metrics_test")
+    #run_metrics(base_path)
+    rerun_metrics(rerun_path)
 
 if __name__ == "__main__":
     main()

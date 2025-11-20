@@ -34,6 +34,7 @@ RENDER_FRAMES = "render_frames"                 # in generated_videos, stitched 
 DEPTHS_DIR = "depths"                           # for depth images as estimated per dust3r
 MASKS_DIR = "masks"                             # masks folder
 LATENTS_DIR = "latents"                         # latents folder
+MISC_DIR = "miscellaneous"
 
 class MaskType(Enum):
     COMP_WITH_PREV = 1

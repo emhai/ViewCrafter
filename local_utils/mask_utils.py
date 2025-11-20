@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from utils.visualization_utils import visualize_pixel_masks
+from local_utils.visualization_utils import visualize_pixel_masks
 
 
 def create_frame_diff_masks(current_imgs, prev_imgs, threshold=0.1, output_dir=None):

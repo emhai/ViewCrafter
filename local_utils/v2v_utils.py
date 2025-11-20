@@ -37,7 +37,16 @@ def init_tot_results_file(base_dir):
                     "PSNR ↑",
                     "SSIM ↑",
                     "LPIPS ↓",
-                    "FID ↓"
+                    "FID ↓",
+                    "FVD ↓",
+                    "FVMD ↓",
+                    "subject_consistency",
+                    "background_consistency",
+                    "temporal_flickering",
+                    "motion_smoothness",
+                    "dynamic_degree",
+                    "aesthetic_quality",
+                    "imaging_quality"
                 ]
             )
     return results_file
@@ -79,7 +88,7 @@ def extract_frames(video_path, frames_path):
     subprocess.run(ffmpeg_command)
 
 def ffmpeg_side_by_side_vid(vid1, vid2, output_vid):
-    ffmpeg_command = ["ffmpeg", "-i", str(vid1), "-i", str(vid2), "-filter_complex", "hstack=shortest=1", "-c:v", "libx264", str(output_vid)]
+    ffmpeg_command = ["ffmpeg", "-y", "-i", str(vid1), "-i", str(vid2), "-filter_complex", "hstack=shortest=1", "-c:v", "libx264", str(output_vid)]
     subprocess.run(ffmpeg_command)
 
 def create_folder_structure(folders):
@@ -101,6 +110,7 @@ def setup_structure(save_path, source_path, gt_path):
     rnd_videos_path = save_path / RENDERED_VIDEOS_DIR
     rnd_frames_path = save_path / RENDERED_FRAMES_DIR
     vis_results_path = save_path / VIS_RESULTS_DIR
+    misc_path = save_path / MISC_DIR
 
     all_folders = [og_videos_path,
                    og_frames_path,
@@ -112,7 +122,8 @@ def setup_structure(save_path, source_path, gt_path):
                    rnd_frames_path,
                    inputs_path,
                    results_path,
-                   vis_results_path]
+                   vis_results_path,
+                   misc_path]
 
     create_folder_structure(all_folders)
 

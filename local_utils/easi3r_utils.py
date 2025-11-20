@@ -14,7 +14,7 @@ from configs.v2v_config import *
 from PIL import Image
 import torchvision.transforms as transforms
 
-from utils.visualization_utils import visualize_pixel_masks
+from local_utils.visualization_utils import visualize_pixel_masks
 
 PATH_TO_EASI3R = Path("/home/emmahaidacher/Desktop/Easi3R")
 
