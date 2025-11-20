@@ -15,10 +15,8 @@ python inference.py \
 --height        576 \
 --width         1024 \
 --model_path    ./checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth \
---exp_name      cfg_ddim_latent_blending_EXP_NAME \
+--exp_name      EXP_NAME \
 --n_frames      NUMBER_FRAMES \
 --set_position \
 --reuse_guidance_image \
---unconditional_guidance_scale 1.0 \
---use_latent_blending \
---mask_type easi3r_prev
+--msa all

@@ -1,10 +1,15 @@
 import shutil
 import subprocess
 from pathlib import Path
+
+from fontTools.unicodedata import script
+
 from configs.v2v_config import *
 from configs.dataset_config import *
 import time
 import csv
+
+from local_utils.metric_utils import rerun_metrics
 
 
 def run_one_category_all_datasets():
@@ -78,20 +83,22 @@ def run_one_dataset_all_categories():
         except subprocess.CalledProcessError as e:
             print(f"Script {modified} failed with return code {e.returncode}")
 
-def run_all():
+def run_all(datasets_path, out_dir, scripts_to_run):
     scripts_dir = Path(PATH_TO_REPO) / "master_scripts" / "multiple"
-    out_dir = Path(PATH_TO_GOOD_RESULTS) / "results_18_11"
     if not out_dir.exists():
         out_dir.mkdir()
-    datasets_path = Path(PATH_TO_DATASETS) / "near_middle_coffee_yoga_goats"
 
     for dataset in datasets_path.iterdir():
         img_dir = dataset / "input"
         gt_dir = dataset / "gt"
         no_frames = 60
         for script in scripts_dir.iterdir():
-            script_name = script.name.split(".")[0]
-            exp_name = dataset.name
+
+            script_name = int(script.name.split("_")[0])
+            if script_name not in scripts_to_run:
+                continue
+
+            exp_name = f"{script.stem}_{dataset.name}"
             text = script.read_text()
 
             replacements = {
@@ -120,7 +127,18 @@ def run_all():
 
 
 def main():
-    run_all()
+
+    out_dir = Path(PATH_TO_GOOD_RESULTS) / "results_18_11"
+    datasets_path = Path(PATH_TO_DATASETS) / "near_middle_coffee_yoga_goats"
+    to_run_coffee = [4, 9, 10]
+    run_all(datasets_path, out_dir, to_run_coffee)
+
+    to_run_all = [0, 8, 9, 10]
+    datasets_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS/datasets")
+    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_20_11")
+    run_all(datasets_path, out_dir, to_run_all)
+
+    rerun_metrics(Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_18_11"))
 
 if __name__ == "__main__":
     main()

@@ -15,10 +15,10 @@ python inference.py \
 --height        576 \
 --width         1024 \
 --model_path    ./checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth \
---exp_name      msa_masactrl_plus_ddim_plus_cfg_EXP_NAME \
+--exp_name      EXP_NAME \
 --n_frames      NUMBER_FRAMES \
 --set_position \
 --reuse_guidance_image \
---msa masactrl \
---use_ddim_inversion \
---unconditional_guidance_scale 1.0
+--unconditional_guidance_scale 1.0 \
+--use_latent_blending \
+--mask_type easi3r_prev

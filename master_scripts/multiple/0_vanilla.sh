@@ -8,14 +8,12 @@ python inference.py \
 --ckpt_path     ./checkpoints/model_16.ckpt \
 --config        configs/inference_pvd_1024.yaml \
 --ddim_steps    50 \
---ddim_eta      0.0 \
---temperature   0.0 \
+--ddim_eta      1.0 \
+--temperature   1.0 \
 --video_length  16 \
 --device        cuda:0 \
 --height        576 \
 --width         1024 \
 --model_path    ./checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth \
---exp_name      det_sampling_EXP_NAME \
---n_frames      NUMBER_FRAMES \
---set_position \
---reuse_guidance_image
+--exp_name      EXP_NAME \
+--n_frames      NUMBER_FRAMES

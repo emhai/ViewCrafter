@@ -285,7 +285,7 @@ def run_metrics(base_dir):
 
         ranking = pick_best_candidate(
             ground_truth_frame,
-            base_dir / GENERATED_FRAMES_DIR,
+            base_dir / RENDERED_FRAMES_DIR,
             max_frames=11,
             stride=6, # should be 10 frames per 60 frame vid
         )
@@ -331,9 +331,9 @@ def run_metrics(base_dir):
         ffmpeg_side_by_side_vid(gt_video, gen_video, base_dir / VIS_RESULTS_DIR / f"{gt_name}_{best_candidate.name}.mp4")
 
     # calculate only once over all videos (distribution)
-    fvd = 0 # calc_fvd(base_dir / GROUND_TRUTH_VIDEOS_DIR, base_dir / GENERATED_VIDEOS_DIR)  # todo --> add to csv if uncomment
+    fvd = calc_fvd(base_dir / GROUND_TRUTH_VIDEOS_DIR, base_dir / GENERATED_VIDEOS_DIR)
 
-    fvmd = 0 # calc_fvmd(base_dir / GROUND_TRUTH_FRAMES_DIR, base_dir / GENERATED_FRAMES_DIR, base_dir / MISC_DIR)
+    fvmd = calc_fvmd(base_dir / GROUND_TRUTH_FRAMES_DIR, base_dir / GENERATED_FRAMES_DIR, base_dir / MISC_DIR)
 
     vbench = calc_vbench(base_dir, base_dir / GENERATED_VIDEOS_DIR)
 
@@ -382,9 +382,9 @@ def main():
     # run(original_path, synthesized_path)
 
     base_path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/test_metrix")
-    rerun_path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/rerun_metrics_test")
-    #run_metrics(base_path)
-    rerun_metrics(rerun_path)
+    # rerun_path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/rerun_metrics_test")
+    run_metrics(base_path)
+    # rerun_metrics(base_path)
 
 if __name__ == "__main__":
     main()
