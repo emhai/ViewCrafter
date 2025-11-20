@@ -147,7 +147,6 @@ class ViewCrafter:
         videos = (renderings * 2.0 - 1.0).permute(3, 0, 1, 2).unsqueeze(0).to(self.device)
         condition_index = [0]
 
-        masks = None
         latents = None
 
         if self.opts.use_latent_blending:
