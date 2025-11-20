@@ -304,7 +304,6 @@ class DDIMSampler(object):
         # clean_cond = kwargs.pop("clean_cond", False)
         clean_cond = (conds_z0 is not None)
 
-
         if msa == MSAType.MASACTRL:
             msa_tracker = MSATracker(start_step=4, start_layer=10) # from MasaCtrl
         elif msa == MSAType.PIX_2_VIDEO:

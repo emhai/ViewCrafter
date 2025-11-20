@@ -17,10 +17,27 @@ def init_results_file(base_dir):
                     "exp_name",
                     "GT_video",
                     "GEN_video",
-                    "PSNR",
-                    "SSIM",
-                    "LPIPS",
-                    "FID"
+                    "PSNR ↑",
+                    "SSIM ↑",
+                    "LPIPS ↓",
+                    "FID ↓"
+                ]
+            )
+    return results_file
+
+def init_tot_results_file(base_dir):
+    results_file = base_dir / TOT_RESULTS_CSV_FILE
+
+    if not results_file.exists():
+        with results_file.open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(
+                [
+                    "exp_name",
+                    "PSNR ↑",
+                    "SSIM ↑",
+                    "LPIPS ↓",
+                    "FID ↓"
                 ]
             )
     return results_file

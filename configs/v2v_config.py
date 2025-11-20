@@ -6,6 +6,7 @@ PATH_TO_DATASETS = "/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS"
 
 OUTPUT_LOG_FILE = "output.log"                  # file to log all output not necessary in terminal
 RESULTS_CSV_FILE = "results.csv"                # file for all results, metrics ...
+TOT_RESULTS_CSV_FILE = "total_results.csv"
 TIMINGS_CSV_FILE = "timings.csv"                # file for all timings
 ARGS_FILE = "args.json"                         # file for all input parameters
 

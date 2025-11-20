@@ -79,11 +79,11 @@ def run_one_dataset_all_categories():
             print(f"Script {modified} failed with return code {e.returncode}")
 
 def run_all():
-    scripts_dir = Path(PATH_TO_REPO / "master_scripts/multiple")
-    out_dir = Path(PATH_TO_GOOD_RESULTS / "NEAR_RESULTS_ALL")
+    scripts_dir = Path(PATH_TO_REPO) / "master_scripts" / "multiple"
+    out_dir = Path(PATH_TO_GOOD_RESULTS) / "results_18_11"
     if not out_dir.exists():
         out_dir.mkdir()
-    datasets_path = Path(PATH_TO_DATASETS / "near_datasets")
+    datasets_path = Path(PATH_TO_DATASETS) / "near_middle_coffee_yoga_goats"
 
     for dataset in datasets_path.iterdir():
         img_dir = dataset / "input"
@@ -91,7 +91,7 @@ def run_all():
         no_frames = 60
         for script in scripts_dir.iterdir():
             script_name = script.name.split(".")[0]
-            exp_name = dataset.name + "_" + script_name
+            exp_name = dataset.name
             text = script.read_text()
 
             replacements = {
@@ -105,13 +105,22 @@ def run_all():
                 text = text.replace(old, new)
 
             modified = scripts_dir / f"temp_{script.name}"
-            modified.write_text(text)
+            new_text = f"cd {PATH_TO_REPO}\n" + text
+            modified.write_text(new_text)
             modified.chmod(0o755)
-            subprocess.run(["bash", str(modified)], check=True)
+            try:
+                subprocess.run(["bash", str(modified)], check=True)
+            except subprocess.CalledProcessError as e:
+                print(f"Script {modified} failed with return code {e.returncode}")
+            finally:
+                try:
+                    modified.unlink()  # or modified.unlink(missing_ok=True) on Python 3.8+
+                except FileNotFoundError:
+                    pass
 
 
 def main():
-    run_one_dataset_all_categories()
+    run_all()
 
 if __name__ == "__main__":
     main()

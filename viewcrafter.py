@@ -786,8 +786,7 @@ class ViewCrafter:
     def run_video_interp(self, mode):
 
         input_dir = self.base_dir / INPUTS_DIR  # all inputs
-        results_dir = self.base_dir /RESULTS_DIR  # all results
-        cameras_dir = self.base_dir / GENERATED_VIDEOS_DIR # all cameras (result in the end)
+        results_dir = self.base_dir / RESULTS_DIR  # all results
 
         all_frames = [x.name for x in sorted(input_dir.iterdir(), key=lambda x: int(x.stem))]
         all_frames = all_frames[:self.opts.n_frames] # todo assert that n_frames < input_vid_frames
@@ -843,8 +842,9 @@ class ViewCrafter:
         separate_cameras(self.base_dir, DIFFUSION_FRAMES)
         separate_cameras(self.base_dir, RENDER_FRAMES)
 
-        with self.timer.time("metrics"):
-            run_metrics(self.base_dir)
+        if self.opts.gt_dir is not None:
+            with self.timer.time("metrics"):
+                run_metrics(self.base_dir)
 
 
     def setup_diffusion(self):

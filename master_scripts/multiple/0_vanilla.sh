@@ -1,4 +1,4 @@
-python /home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/inference.py \
+python inference.py \
 --image_dir     IMAGE_DIR \
 --gt_dir        GT_DIR \
 --out_dir       OUT_DIR \

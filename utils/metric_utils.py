@@ -13,7 +13,7 @@ from cdfvd import fvd
 from fvmd import fvmd
 
 from configs.v2v_config import *
-from utils.v2v_utils import init_results_file, ffmpeg_side_by_side_vid
+from utils.v2v_utils import init_results_file, ffmpeg_side_by_side_vid, init_tot_results_file
 
 """ 
 ==============================================
@@ -21,7 +21,7 @@ from utils.v2v_utils import init_results_file, ffmpeg_side_by_side_vid
 ==============================================
 """
 # https://www.geeksforgeeks.org/python-peak-signal-to-noise-ratio-psnr/
-def PSNR(original_path, synthesized_path):
+def calc_psnr(original_path, synthesized_path):
 
     original = cv2.imread(str(original_path)).astype(np.float32)
     synthesized = cv2.imread(str(synthesized_path)).astype(np.float32)
@@ -34,7 +34,7 @@ def PSNR(original_path, synthesized_path):
     return psnr
 
 # https://www.geeksforgeeks.org/python-peak-signal-to-noise-ratio-psnr/
-def PSNR_video(original_path, synthesized_path):
+def calc_psnr_video(original_path, synthesized_path):
 
     gt_frames = sorted(original_path.iterdir())
     synthesized_frames = sorted(synthesized_path.iterdir())
@@ -64,7 +64,7 @@ def PSNR_video(original_path, synthesized_path):
     return psnr
 
 # https://stackoverflow.com/questions/71567315/how-to-get-the-ssim-comparison-score-between-two-images
-def SSIM(original_path, synthesized_path):
+def calc_ssim(original_path, synthesized_path):
     original = cv2.imread(str(original_path), cv2.IMREAD_GRAYSCALE)
     synthesized = cv2.imread(str(synthesized_path), cv2.IMREAD_GRAYSCALE)
     assert synthesized.shape == original.shape
@@ -77,7 +77,7 @@ def SSIM(original_path, synthesized_path):
     # additional_SSIM(diff, original, synthesized)
     return score
 
-def SSIM_video(original_path, synthesized_path):
+def calc_ssim_video(original_path, synthesized_path):
 
     gt_frames = sorted(original_path.iterdir())
     synthesized_frames = sorted(synthesized_path.iterdir())
@@ -87,14 +87,14 @@ def SSIM_video(original_path, synthesized_path):
 
     for p_ref, p_test in zip(gt_frames, synthesized_frames):
 
-        ssim = SSIM(p_ref, p_test)
+        ssim = calc_ssim(p_ref, p_test)
         ssim_list.append(ssim)
 
     ssim_avg = np.mean(ssim_list)
     return ssim_avg
 
 # https://github.com/richzhang/PerceptualSimilarity/blob/master/test_network.py
-def LPIPS(original_path, synthesized_path):
+def calc_lpips(original_path, synthesized_path):
 
     spatial = True         # Return a spatial map of perceptual distance.
     loss_fn = lpips.LPIPS(net='alex', spatial=spatial, verbose=False).cuda()  # Can also set net = 'squeeze' or 'vgg'
@@ -115,7 +115,7 @@ def LPIPS(original_path, synthesized_path):
         # pylab.imshow(d[0, 0, ...].data.cpu().numpy())
         # pylab.show()
 
-def LPIPS_video(original_path, synthesized_path):
+def calc_lpips_video(original_path, synthesized_path):
 
     gt_frames = sorted(original_path.iterdir())
     synthesized_frames = sorted(synthesized_path.iterdir())
@@ -125,15 +125,14 @@ def LPIPS_video(original_path, synthesized_path):
 
     for p_ref, p_test in zip(gt_frames, synthesized_frames):
 
-        lpips = LPIPS(p_ref, p_test)
+        lpips = calc_lpips(p_ref, p_test)
         lpips_list.append(lpips)
 
     lpips_avg = np.mean(lpips_list)
     return lpips_avg
 
-
 # https://github.com/mseitzer/pytorch-fid
-def FID(original_path, synthesized_path):
+def calc_fid(original_path, synthesized_path):
     # requires full paths
     paths = [str(original_path), str(synthesized_path)]
     fid_value = calculate_fid_given_paths(
@@ -152,16 +151,16 @@ def FID(original_path, synthesized_path):
 
 # https://content-debiased-fvd.github.io/documentation/
 # https://github.com/songweige/content-debiased-fvd
-def FVD(original_path, synthesized_path):
-    evaluator = fvd.cdfvd('videomae', ckpt_path=None, device='cuda')
+def calc_fvd(original_path, synthesized_path):
+    evaluator = fvd.cdfvd('i3d', ckpt_path=None)
 
-    evaluator.compute_real_stats(evaluator.load_videos(str(original_path)))
-    evaluator.compute_fake_stats(evaluator.load_videos(str(synthesized_path)))
+    evaluator.compute_real_stats(evaluator.load_videos(str(original_path), data_type="video_folder"))
+    evaluator.compute_fake_stats(evaluator.load_videos(str(synthesized_path),  data_type="video_folder"))
     score = evaluator.compute_fvd_from_stats()
 
     return score
 
-def FVMD(original_path, synthesized_path, log_path):
+def calc_fvmd(original_path, synthesized_path, log_path):
     #Folder/
     #|-- Clip1/
     #|   |-- Frame1.png/jpg
@@ -209,30 +208,29 @@ def evaluate_frame_dirs(gt_dir, cand_dir, max_frames=None, stride=1):
     assert len(gt_frames) == len(cand_frames)
 
     num_pairs = len(gt_frames)
-    psnrs = []
-    ssims = []
+    psnr_list = []
+    ssim_list = []
 
     for i in range(0, num_pairs, stride):
-        if max_frames is not None and len(psnrs) >= max_frames:
+        if max_frames is not None and len(psnr_list) >= max_frames:
             break
 
         gt_path = gt_frames[i]
         cand_path = cand_frames[i]
 
-        psnrs.append(PSNR(gt_path, cand_path))
-        ssims.append(SSIM(gt_path, cand_path))
+        psnr_list.append(calc_psnr(gt_path, cand_path))
+        ssim_list.append(calc_ssim(gt_path, cand_path))
 
-
-    psnrs = np.array(psnrs, dtype=np.float32)
-    ssims = np.array(ssims, dtype=np.float32)
+    psnr_list = np.array(psnr_list, dtype=np.float32)
+    ssim_list = np.array(ssim_list, dtype=np.float32)
 
     return {
         "candidate_dir": str(cand_dir),
-        "num_frames": int(len(psnrs)),
-        "psnr_mean": float(psnrs.mean()),
-        "psnr_std": float(psnrs.std()),
-        "ssim_mean": float(ssims.mean()),
-        "ssim_std": float(ssims.std()),
+        "num_frames": int(len(psnr_list)),
+        "psnr_mean": float(psnr_list.mean()),
+        "psnr_std": float(psnr_list.std()),
+        "ssim_mean": float(ssim_list.mean()),
+        "ssim_std": float(ssim_list.std()),
     }
 
 def pick_best_candidate(gt_frames_dir, candidate_frame_dirs, max_frames=None, stride=1):
@@ -252,25 +250,20 @@ def pick_best_candidate(gt_frames_dir, candidate_frame_dirs, max_frames=None, st
     return results
 
 def run_metrics(base_dir):
-    gt_frames_dir = base_dir / GROUND_TRUTH_FRAMES_DIR
-    gen_frames_dir = base_dir / GENERATED_FRAMES_DIR
-    gt_videos_dir = base_dir / GROUND_TRUTH_VIDEOS_DIR
-    gen_videos_dir = base_dir / GENERATED_VIDEOS_DIR
-    vis_results_dir = base_dir / VIS_RESULTS_DIR
-
     results_file = init_results_file(base_dir)
+    total_results_file = init_tot_results_file(base_dir)
 
     total_psnr = []
     total_ssim = []
     total_lpips = []
     total_fid = []
-    for ground_truth_frame in gt_frames_dir.iterdir():
+    for ground_truth_frame in (base_dir / GROUND_TRUTH_FRAMES_DIR).iterdir():
 
         ranking = pick_best_candidate(
             ground_truth_frame,
-            gen_frames_dir,
-            max_frames=10,
-            stride=10,
+            base_dir / GENERATED_FRAMES_DIR,
+            max_frames=11,
+            stride=6, # should be 10 frames per 60 frame vid
         )
 
         for r in ranking:
@@ -284,15 +277,20 @@ def run_metrics(base_dir):
         best = ranking[0]['candidate_dir']
         print(f"Best candidate (frames) for gt {ground_truth_frame.name}: {best}")
 
-        PSNR_vid = PSNR_video(ground_truth_frame, Path(best))
-        SSIM_vid = SSIM_video(ground_truth_frame, Path(best))
-        LPIPS_vid = LPIPS_video(ground_truth_frame, Path(best))
-        FID_vid = FID(ground_truth_frame, Path(best))
+        gt_name = ground_truth_frame.name
+        gen_name = Path(best).name
 
-        total_psnr.append(PSNR_vid)
-        total_ssim.append(SSIM_vid)
-        total_lpips.append(LPIPS_vid)
-        total_fid.append(FID_vid)
+        psnr = calc_psnr_video(ground_truth_frame, Path(best))
+        ssim = calc_ssim_video(ground_truth_frame, Path(best))
+        lpips = calc_lpips_video(ground_truth_frame, Path(best))
+        fid = calc_fid(ground_truth_frame, Path(best))
+        # fvd = FVD(gt_videos_dir, gen_videos_dir) --> add to csv if uncomment
+
+        total_psnr.append(psnr)
+        total_ssim.append(ssim)
+        total_lpips.append(lpips)
+        total_fid.append(fid)
+        # total_fvd.append(fvd)
 
         with results_file.open("a", newline="") as f:
             writer = csv.writer(f)
@@ -300,24 +298,20 @@ def run_metrics(base_dir):
                 base_dir.name,
                 ground_truth_frame.name,
                 Path(best).name,
-                f"{PSNR_vid:.3f}",
-                f"{SSIM_vid:.3f}",
-                f"{LPIPS_vid:.3f}",
-                f"{FID_vid:.3f}"
+                f"{psnr:.3f}",
+                f"{ssim:.3f}",
+                f"{lpips:.3f}",
+                f"{fid:.3f}"
             ])
 
-        gt_name = ground_truth_frame.name
-        gen_name = Path(best).name
-        gt_video = gt_videos_dir / f"{gt_name}.mp4"
-        gen_video = gen_videos_dir / f"{gen_name}.mp4"
-        ffmpeg_side_by_side_vid(gt_video, gen_video, vis_results_dir / f"{gt_name}_{gen_name}.mp4")
+        gt_video = base_dir / GROUND_TRUTH_VIDEOS_DIR / f"{gt_name}.mp4"
+        gen_video = base_dir / GENERATED_VIDEOS_DIR / f"{gen_name}.mp4"
+        ffmpeg_side_by_side_vid(gt_video, gen_video, base_dir / VIS_RESULTS_DIR / f"{gt_name}_{gen_name}.mp4")
 
-    with results_file.open("a", newline="") as f:
+    with total_results_file.open("a", newline="") as f:
         writer = csv.writer(f)
         writer.writerow([
             base_dir.name,
-            "AVERAGE",
-            "",
             f"{np.mean(total_psnr):.3f}",
             f"{np.mean(total_ssim):.3f}",
             f"{np.mean(total_lpips):.3f}",
@@ -328,10 +322,10 @@ def run(original_path, synthesized_path):
     warnings.filterwarnings("ignore", category=UserWarning) # in torchvision "Arguments other than a weight enum ... deprecated"
     warnings.filterwarnings("ignore", category=FutureWarning) # in lpips "You are using torch.load with weights_onl=False ... deprecated"
 
-    lpips = LPIPS(original_path, synthesized_path)
+    lpips = calc_lpips(original_path, synthesized_path)
     lpips = lpips.item()
-    psnr= PSNR(original_path, synthesized_path)
-    ssim = SSIM(original_path, synthesized_path)
+    psnr= calc_psnr(original_path, synthesized_path)
+    ssim = calc_ssim(original_path, synthesized_path)
     # print(f"For files {original_name}, {synthesized_name}: PSNR: {psnr:.3f}, SSIM: {ssim:.3f}, LPIPS: {lpips:.3f}")
     return lpips, psnr, ssim
 
