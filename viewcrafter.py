@@ -841,6 +841,12 @@ class ViewCrafter:
         separate_cameras(self.base_dir, DIFFUSION_FRAMES)
         separate_cameras(self.base_dir, RENDER_FRAMES)
 
+        print("Cleaning GPU up")
+        torch.cuda.synchronize()  # finish kernels
+        torch.cuda.empty_cache()  # release cached blocks to the driver
+        torch.cuda.ipc_collect()  # clean IPC memory
+        del self.diffusion
+
         if self.opts.gt_dir is not None:
             with self.timer.time("metrics"):
                 run_metrics(self.base_dir)
@@ -864,7 +870,7 @@ class ViewCrafter:
         model.eval()
         self.diffusion = model
 
-        print_diffusion_model(model, max_depth=7)
+        #print_diffusion_model(model, max_depth=7)
 
         h, w = self.opts.height // 8, self.opts.width // 8 # latent size
         channels = model.model.diffusion_model.out_channels

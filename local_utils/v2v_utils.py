@@ -6,51 +6,6 @@ import numpy as np
 from pathlib import Path
 from configs.v2v_config import *
 
-def init_results_file(base_dir):
-    results_file = base_dir / RESULTS_CSV_FILE
-
-    if not results_file.exists():
-        with results_file.open("w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(
-                [
-                    "exp_name",
-                    "GT_video",
-                    "GEN_video",
-                    "PSNR ↑",
-                    "SSIM ↑",
-                    "LPIPS ↓",
-                    "FID ↓"
-                ]
-            )
-    return results_file
-
-def init_tot_results_file(base_dir):
-    results_file = base_dir / TOT_RESULTS_CSV_FILE
-
-    if not results_file.exists():
-        with results_file.open("w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(
-                [
-                    "exp_name",
-                    "PSNR ↑",
-                    "SSIM ↑",
-                    "LPIPS ↓",
-                    "FID ↓",
-                    "FVD ↓",
-                    "FVMD ↓",
-                    "subject_consistency",
-                    "background_consistency",
-                    "temporal_flickering",
-                    "motion_smoothness",
-                    "dynamic_degree",
-                    "aesthetic_quality",
-                    "imaging_quality"
-                ]
-            )
-    return results_file
-
 def init_timings_file(base_dir):
     timings_file = base_dir / TIMINGS_CSV_FILE
 

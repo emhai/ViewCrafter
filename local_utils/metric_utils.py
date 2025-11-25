@@ -1,5 +1,6 @@
 import csv
 import json
+import shutil
 import warnings
 from pathlib import Path
 
@@ -14,8 +15,53 @@ from cdfvd import fvd
 from fvmd import fvmd
 
 from configs.v2v_config import *
-from local_utils.v2v_utils import init_results_file, ffmpeg_side_by_side_vid, init_tot_results_file
+from local_utils.v2v_utils import ffmpeg_side_by_side_vid
 from vbench import VBench
+
+def init_results_file(base_dir):
+    results_file = base_dir / RESULTS_CSV_FILE
+
+    if not results_file.exists():
+        with results_file.open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(
+                [
+                    "exp_name",
+                    "GT_video",
+                    "GEN_video",
+                    "PSNR ↑",
+                    "SSIM ↑",
+                    "LPIPS ↓",
+                    "FID ↓"
+                ]
+            )
+    return results_file
+
+def init_tot_results_file(base_dir):
+    results_file = base_dir / TOT_RESULTS_CSV_FILE
+
+    if not results_file.exists():
+        with results_file.open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(
+                [
+                    "exp_name",
+                    "PSNR ↑",
+                    "SSIM ↑",
+                    "LPIPS ↓",
+                    "FID ↓",
+                    "FVD ↓",
+                    "FVMD ↓",
+                    "subject_consistency ↑",
+                    "background_consistency ↑",
+                    "temporal_flickering ↑",
+                    "motion_smoothness ↑",
+                    "dynamic_degree ↑",
+                    "aesthetic_quality ↑",
+                    "imaging_quality ↑"
+                ]
+            )
+    return results_file
 
 """ 
 ==============================================
@@ -283,14 +329,22 @@ def run_metrics(base_dir):
     total_fid = []
     for ground_truth_frame in (base_dir / GROUND_TRUTH_FRAMES_DIR).iterdir():
 
-        ranking = pick_best_candidate(
+        ranking_generated = pick_best_candidate(
+            ground_truth_frame,
+            base_dir / GENERATED_FRAMES_DIR,
+            max_frames=11,
+            stride=6,
+        )
+
+        ranking_rendered = pick_best_candidate(
             ground_truth_frame,
             base_dir / RENDERED_FRAMES_DIR,
             max_frames=11,
-            stride=6, # should be 10 frames per 60 frame vid
+            stride=6,
         )
 
-        for r in ranking:
+        print("Generated candidates:")
+        for r in ranking_generated:
             print(
                 r["candidate_dir"],
                 "frames:", r["num_frames"],
@@ -298,7 +352,28 @@ def run_metrics(base_dir):
                 "SSIM:", r["ssim_mean"],
             )
 
-        best = ranking[0]['candidate_dir']
+        print("\nRendered candidates:")
+        for r in ranking_rendered:
+            print(
+                r["candidate_dir"],
+                "frames:", r["num_frames"],
+                "PSNR:", r["psnr_mean"],
+                "SSIM:", r["ssim_mean"],
+            )
+
+        best_generated = ranking_generated[0]
+        best_rendered = ranking_rendered[0]
+
+        # Choose the better one (here: prioritize PSNR, then SSIM)
+        def score(r):
+            return (r["psnr_mean"], r["ssim_mean"])
+
+        best_overall = max([best_generated, best_rendered], key=score)
+
+        print(f"\nBest candidates (frames) for gt {ground_truth_frame.name}: {best_generated['candidate_dir']} and {best_rendered['candidate_dir']}")
+        print("WINNER:", "GENERATED" if best_overall is best_generated else "RENDERED")
+
+        best = best_overall['candidate_dir']
         print(f"Best candidate (frames) for gt {ground_truth_frame.name}: {best}")
 
         gt_name = ground_truth_frame.name
@@ -332,9 +407,7 @@ def run_metrics(base_dir):
 
     # calculate only once over all videos (distribution)
     fvd = calc_fvd(base_dir / GROUND_TRUTH_VIDEOS_DIR, base_dir / GENERATED_VIDEOS_DIR)
-
     fvmd = calc_fvmd(base_dir / GROUND_TRUTH_FRAMES_DIR, base_dir / GENERATED_FRAMES_DIR, base_dir / MISC_DIR)
-
     vbench = calc_vbench(base_dir, base_dir / GENERATED_VIDEOS_DIR)
 
     with total_results_file.open("a", newline="") as f:
@@ -363,15 +436,45 @@ def run(original_path, synthesized_path):
 
 def rerun_metrics(results_dir):
 
-    for dir in results_dir.iterdir():
-        result_file = dir / RESULTS_CSV_FILE
-        tot_result_file = dir / TOT_RESULTS_CSV_FILE
+    for result in results_dir.iterdir():
+        result_file = result / RESULTS_CSV_FILE
+        tot_result_file = result / TOT_RESULTS_CSV_FILE
+        vis_folder = result / VIS_RESULTS_DIR
+
         if result_file.exists():
             result_file.unlink()
         if tot_result_file.exists():
             tot_result_file.unlink()
+        if vis_folder.exists():
+            shutil.rmtree(vis_folder)
+            vis_folder.mkdir()
 
-        run_metrics(dir)
+        run_metrics(result)
+
+def combine_files(results_dir):
+
+    output_path = results_dir / "combined_results.csv"
+
+    with output_path.open("w", newline="") as out_f:
+        writer = None
+
+        for result in results_dir.iterdir():
+            if not result.is_dir():
+                continue
+
+            tot_result_file = result / TOT_RESULTS_CSV_FILE
+            assert tot_result_file.exists()
+
+            with tot_result_file.open("r", newline="") as in_f:
+                reader = csv.reader(in_f)
+                header = next(reader)
+
+                if writer is None:
+                    writer = csv.writer(out_f)
+                    writer.writerow(header)
+
+                for row in reader:
+                    writer.writerow(row)
 
 
 def main():
@@ -382,9 +485,10 @@ def main():
     # run(original_path, synthesized_path)
 
     base_path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/test_metrix")
-    # rerun_path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/rerun_metrics_test")
-    run_metrics(base_path)
-    # rerun_metrics(base_path)
+    rerun_path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_18_11")
+    # run_metrics(base_path)
+    rerun_metrics(rerun_path)
+    combine_files(rerun_path)
 
 if __name__ == "__main__":
     main()
