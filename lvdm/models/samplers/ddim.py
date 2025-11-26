@@ -313,6 +313,8 @@ class DDIMSampler(object):
         else:
             msa_tracker = None
 
+        print("mask is", mask)
+        print("clean_cond is", clean_cond)
         # cond_copy, unconditional_conditioning_copy = copy.deepcopy(cond), copy.deepcopy(unconditional_conditioning)
         for i, step in enumerate(iterator):
 

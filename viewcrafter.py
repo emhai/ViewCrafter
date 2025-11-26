@@ -156,7 +156,14 @@ class ViewCrafter:
                 latents = self.first_latents
 
         guidance_image = self.guidance_image if self.opts.reuse_guidance_image else None
-
+        if self.opts.use_latent_blending and latents is not None:
+            print("run_number:", self.run_number)
+            print("type(latents):", type(latents))
+            if isinstance(latents, dict):
+                print("latents keys:", latents.keys())
+            else:
+                print("len(latents):", len(latents))
+                print("latents[0].shape:", latents[0].shape)
         with torch.no_grad(), torch.cuda.amp.autocast():
             batch_samples, current_x0, intermediates = image_guided_synthesis(
                                                                             self.diffusion,
@@ -181,7 +188,7 @@ class ViewCrafter:
                                                                             mask=masks,
                                                                             x_T=self.DDIM_noise,
                                                                             ddim_sampler=self.ddim_sampler,
-                                                                            msa=self.msa_type,
+                                                                            msa=self.msa_type
             )
 
             self.prev_latents = intermediates
@@ -264,6 +271,8 @@ class ViewCrafter:
         if self.mask_type in [MaskType.EASI3R_PREV, MaskType.EASI3R_FIRST]:
             prev_mask_dir = self.base_dir / EASI3R_MASKS_DIR / str(self.run_number - 1)
             mask_dir = self.base_dir / EASI3R_MASKS_DIR / str(self.run_number)
+            assert prev_mask_dir.exists() and prev_mask_dir.is_dir() and len(list(prev_mask_dir.iterdir())) != 0
+            assert mask_dir.exists() and mask_dir.is_dir() and len(list(mask_dir.iterdir())) != 0
             prev_mask_folders = sorted(prev_mask_dir.iterdir())
             mask_folders = sorted(mask_dir.iterdir())
             return load_easi3r_masks(mask_folders, prev_mask_folders, current_image, H=self.opts.height // 2, W=self.opts.width // 2, output_dir=mask_save_path)
@@ -670,7 +679,7 @@ class ViewCrafter:
         save_pointcloud_with_normals(imgs, pcd, msk=masks, save_path=os.path.join(self.opts.save_dir, f'pcd.ply'), mask_pc=mask_pc, reduce_pc=False)
 
         latent_masks = self.complete_mask_creation(pcd, imgs, H, W, camera_traj, num_views)
-
+        print(latent_masks)
         with self.timer.time("diffusion"):
             diffusion_results = self.run_diffusion(render_results, latent_masks)
 

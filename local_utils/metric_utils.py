@@ -3,7 +3,9 @@ import json
 import shutil
 import warnings
 from pathlib import Path
-
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 from skimage.metrics import structural_similarity
 from math import log10, sqrt
 import cv2
@@ -18,6 +20,11 @@ from configs.v2v_config import *
 from local_utils.v2v_utils import ffmpeg_side_by_side_vid
 from vbench import VBench
 
+""" 
+==============================================
+=================== INITIALIZE ===============
+==============================================
+"""
 def init_results_file(base_dir):
     results_file = base_dir / RESULTS_CSV_FILE
 
@@ -30,7 +37,7 @@ def init_results_file(base_dir):
                     "GT_video",
                     "GEN_video",
                     "PSNR_mse ↑",
-                    "PSNR_avg ↑"
+                    "PSNR_avg ↑",
                     "SSIM ↑",
                     "LPIPS_alex ↓",
                     "LPIPS_vgg ↓",
@@ -48,7 +55,7 @@ def init_tot_results_file(base_dir):
                 [
                     "exp_name",
                     "PSNR_mse ↑",
-                    "PSNR_avg ↑"
+                    "PSNR_avg ↑",
                     "SSIM ↑",
                     "LPIPS_alex ↓",
                     "LPIPS_vgg ↓",
@@ -65,6 +72,12 @@ def init_tot_results_file(base_dir):
                 ]
             )
     return results_file
+
+""" 
+==============================================
+=================== VISUALIZE ================
+==============================================
+"""
 
 """ 
 ==============================================
@@ -508,9 +521,9 @@ def main():
 
     base_path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/test_metrix")
     rerun_path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/all_results_with_bad")
-    # run_metrics(base_path)
+    run_metrics(base_path)
     # rerun_metrics(rerun_path)
-    combine_files(rerun_path)
+    # combine_files(rerun_path)
 
 if __name__ == "__main__":
     main()

@@ -167,16 +167,16 @@ def generate_frames(modified_path, frames_path):
             subprocess.run(cmd, check=True)
 
 def main():
-    full_modified_dataset_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS/full_modified_datasets")
+    full_modified_dataset_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_3x15/full_modified_datasets")
     full_modified_dataset_path.mkdir(exist_ok=True)
 
-    modified_dataset_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS/modified_datasets")
+    modified_dataset_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_3x15/modified_datasets")
     modified_dataset_path.mkdir(exist_ok=True)
 
-    frames_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS/frames")
+    frames_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_3x15/frames")
     frames_path.mkdir(exist_ok=True)
 
-    finished_dataset_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS/datasets")
+    finished_dataset_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_3x15/datasets")
     finished_dataset_path.mkdir(exist_ok=True)
 
 

@@ -74,7 +74,7 @@ def visualize_camera_positions(models_json_path, plane="xy"):
         plt.title(f"Camera Positions ({plane.upper()} projection)")
         plt.gca().set_aspect("equal", adjustable="box")
         plt.tight_layout()
-        plt.show()
+        plt.savefig(models_json_path.parent / "models_2d.png")
 
 def save_masks(mask_list, save_dir, visualize=True, save=True):
     save_dir = Path(save_dir)
@@ -429,7 +429,11 @@ def visualize_latents(base_dir, intermediates, model, prefix="x_inter"):
 def main():
     path = "/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/SelfCap/corgi-release/optimized/extri.yml"
     # visualize_extrinsics_yaml(path)
-    visualize_camera_positions(Path("/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/06_Goats/models.json"))
+    glf_path = Path("/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/google_lightfield")
+    for dir in glf_path.iterdir():
+        if dir.is_dir():
+            if (dir / "models.json").exists():
+                visualize_camera_positions(dir / "models.json")
     
 if __name__ == '__main__':
     main()
