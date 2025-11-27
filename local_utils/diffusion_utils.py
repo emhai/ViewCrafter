@@ -130,7 +130,7 @@ def guided_DDIM_inversion(model, videos, result, guidance_image, prompts, ddim_s
 
     inverted_noise_run0, intermediates = ddim_sampler.ddim_inversion(
         x0=result,
-        cond=cond_run0_nulltext,  # Invert with null point cloud
+        cond=cond_run0_nulltext,
         ddim_steps=ddim_steps,
         ddim_eta=ddim_eta,
         unconditional_guidance_scale=unconditional_guidance_scale,

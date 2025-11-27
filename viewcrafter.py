@@ -18,7 +18,7 @@ from pytorch3d.structures import Pointclouds
 
 from local_utils.pvd_utils import *
 from local_utils.v2v_utils import *
-from local_utils.fdgs_utils import *
+from local_utils.gaussians4d_utils import *
 from local_utils.easi3r_utils import *
 from local_utils.visualization_utils import *
 

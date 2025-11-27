@@ -91,7 +91,7 @@ def run_all(datasets_path, out_dir, scripts_to_run):
     for dataset in datasets_path.iterdir():
         img_dir = dataset / "input"
         gt_dir = dataset / "gt"
-        no_frames = 60
+        no_frames = 45
         for script in scripts_dir.iterdir():
 
             script_name = int(script.name.split("_")[0])
@@ -128,17 +128,17 @@ def run_all(datasets_path, out_dir, scripts_to_run):
 
 def main():
 
-    out_dir = Path(PATH_TO_GOOD_RESULTS) / "results_18_11"
-    datasets_path = Path(PATH_TO_DATASETS) / "near_middle_coffee_yoga_goats"
-    to_run_coffee = [4, 9, 10]
-    run_all(datasets_path, out_dir, to_run_coffee)
+    # out_dir = Path(PATH_TO_GOOD_RESULTS) / "results_26_11"
+    # datasets_path = Path(PATH_TO_DATASETS) / "near_middle_coffee_yoga_goats"
+    # to_run_coffee = [4, 9, 10]
+    # run_all(datasets_path, out_dir, to_run_coffee)
 
-    to_run_all = [0, 8, 9, 10]
-    datasets_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS/datasets")
-    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_20_11")
+    to_run_all = [9, 10]
+    datasets_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_3x15/datasets")
+    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_26_11")
     run_all(datasets_path, out_dir, to_run_all)
 
-    rerun_metrics(Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_18_11"))
+    rerun_metrics(Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_20_11"))
 
 if __name__ == "__main__":
     main()

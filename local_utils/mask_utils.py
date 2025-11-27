@@ -56,7 +56,6 @@ def clean_mask(input_mask):
     dilation = cv2.dilate(closing, kernel, iterations=1)
     filled = cv2.medianBlur(dilation, 7)
 
-
     return filled
 
 def main():

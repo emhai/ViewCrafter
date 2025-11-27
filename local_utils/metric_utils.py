@@ -519,11 +519,11 @@ def main():
 
     # run(original_path, synthesized_path)
 
-    base_path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/test_metrix")
+    base_path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_26_11")
     rerun_path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/all_results_with_bad")
-    run_metrics(base_path)
+    # run_metrics(base_path)
     # rerun_metrics(rerun_path)
-    # combine_files(rerun_path)
+    combine_files(base_path)
 
 if __name__ == "__main__":
     main()

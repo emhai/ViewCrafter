@@ -2,7 +2,7 @@ import csv
 from pathlib import Path
 
 from configs.v2v_config import ARGS_FILE, RESULTS_CSV_FILE
-from local_utils.timer import RunTimer
+from local_utils.timer_utils import RunTimer
 from local_utils.v2v_utils import init_timings_file
 from viewcrafter import ViewCrafter
 import os
