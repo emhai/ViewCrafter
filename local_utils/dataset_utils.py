@@ -2,7 +2,7 @@ import shutil
 import subprocess
 from pathlib import Path
 from configs.v2v_config import *
-from configs.dataset_config import *
+from configs.dataset_config_multi import *
 
 def make_side_by_side(original_video, changed_video, output_video, compare_height=576):
     original_video = Path(original_video)
@@ -179,12 +179,12 @@ def main():
     finished_dataset_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_3x15/datasets")
     finished_dataset_path.mkdir(exist_ok=True)
 
+    assert len(paths) == len(names) == len(video_names) == len(ss) == len(crops)
 
     generate_full_datasets(full_modified_dataset_path)
     generate_filtered_datasets(full_modified_dataset_path, modified_dataset_path)
     generate_frames(modified_dataset_path, frames_path)
     generate_tuple_datasets(modified_dataset_path, finished_dataset_path)
-
 
 if __name__ == "__main__":
     main()

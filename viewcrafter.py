@@ -797,7 +797,7 @@ class ViewCrafter:
         results_dir = self.base_dir / RESULTS_DIR  # all results
 
         all_frames = [x.name for x in sorted(input_dir.iterdir(), key=lambda x: int(x.stem))]
-        all_frames = all_frames[:self.opts.n_frames] # todo assert that n_frames < input_vid_frames
+        all_frames = all_frames[:self.opts.n_frames] # if n_frames > input_vid_frames, ignored
 
         if mode == "single":
             self.opts.mode = 'single_view_txt'  # necessary for inner functions - txt needs to be provided todo also different kinds possible, maybe with self.opts.mode.contains()

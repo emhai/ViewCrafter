@@ -125,6 +125,38 @@ def run_all(datasets_path, out_dir, scripts_to_run):
                 except FileNotFoundError:
                     pass
 
+def run_one(dataset_path, out_dir, script_to_run):
+    if not out_dir.exists():
+        out_dir.mkdir()
+
+    img_dir = dataset_path / "input"
+    gt_dir = dataset_path / "gt"
+    no_frames = 45
+
+    exp_name = f"{script_to_run.stem}_{dataset_path.name}"
+    text = script_to_run.read_text()
+    replacements = {
+        "IMAGE_DIR": str(img_dir),
+        "GT_DIR": str(gt_dir),
+        "OUT_DIR": str(out_dir),
+        "EXP_NAME": exp_name,
+        "NUMBER_FRAMES": str(no_frames),
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    modified = script_to_run.parent / f"temp_{script_to_run.name}"
+    new_text = f"cd {PATH_TO_REPO}\n" + text
+    modified.write_text(new_text)
+    modified.chmod(0o755)
+    try:
+        subprocess.run(["bash", str(modified)], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Script {modified} failed with return code {e.returncode}")
+    finally:
+        try:
+            modified.unlink()  # or modified.unlink(missing_ok=True) on Python 3.8+
+        except FileNotFoundError:
+            pass
 
 def main():
 
@@ -135,10 +167,21 @@ def main():
 
     to_run_all = [9, 10]
     datasets_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_3x15/datasets")
-    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_26_11")
-    run_all(datasets_path, out_dir, to_run_all)
 
-    rerun_metrics(Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_20_11"))
+    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_26_11")
+    run_one(Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_3x15/datasets/harp_3x15_near"),
+            out_dir, Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple/8_cfg__ddim.sh"))
+    #run_all(datasets_path, out_dir, to_run_all)
+    datasets_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_3x15/datasets")
+    inputs = ["steak_3x15_middle", "steak_3x15_near", "welder_3x15_near", "yoga_3x15_near", "harp_3x15_near"]
+    scripts = ["/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple/9_cfg__latent_blending.sh",
+               "/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple/10_cfg__ddim__latent_blending.sh"]
+
+    # for i in inputs:
+    #     for s in scripts:
+    #         run_one(datasets_path / i, out_dir, Path(s))
+#
+    # rerun_metrics(Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_20_11"))
 
 if __name__ == "__main__":
     main()

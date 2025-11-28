@@ -511,6 +511,40 @@ def combine_files(results_dir):
                 for row in reader:
                     writer.writerow(row)
 
+def combine_files_per_dataset(results_dir):
+    results_by_dataset = {}
+    header = None
+
+    for result in sorted(results_dir.iterdir()):
+        if not result.is_dir():
+            continue
+
+        dataset_name = result.stem.split("_")[-3]
+        tot_result_file = result / TOT_RESULTS_CSV_FILE
+        assert tot_result_file.exists()
+
+        with tot_result_file.open("r", newline="") as in_f:
+            reader = csv.reader(in_f)
+            file_header = next(reader)
+
+            if header is None:
+                header = file_header
+
+            if dataset_name not in results_by_dataset:
+                results_by_dataset[dataset_name] = []
+
+            for row in reader:
+                results_by_dataset[dataset_name].append(row)
+
+    for dataset_name, rows in results_by_dataset.items():
+        out_path = results_dir / f"{dataset_name}_{TOT_RESULTS_CSV_FILE}"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with out_path.open("w", newline="") as out_f:
+            writer = csv.writer(out_f)
+            writer.writerow(header)
+            writer.writerows(rows)
+
 
 def main():
 
@@ -523,7 +557,7 @@ def main():
     rerun_path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/all_results_with_bad")
     # run_metrics(base_path)
     # rerun_metrics(rerun_path)
-    combine_files(base_path)
+    combine_files_per_dataset(base_path)
 
 if __name__ == "__main__":
     main()

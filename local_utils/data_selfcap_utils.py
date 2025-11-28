@@ -4,6 +4,120 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 
+
+def read_names(fs):
+    node = fs.getNode("names")
+    names = []
+    if not node.empty():
+        for i in range(int(node.size())):
+            names.append(node.at(i).string())
+    else:
+        # fallback: try sequential ids until missing
+        i = 0
+        while True:
+            key_rot = f"Rot_{i:02d}"
+            if fs.getNode(key_rot).empty():
+                break
+            names.append(f"{i:02d}")
+            i += 1
+    return names
+
+def read_mat(fs, key):
+    node = fs.getNode(key)
+    if node.empty():
+        return None
+    return node.mat()  # returns a numpy array
+
+
+def visualize_extrinsics_yaml(path):
+    # Load OpenCV YAML
+    fs = cv2.FileStorage(path, cv2.FILE_STORAGE_READ)
+    if not fs.isOpened():
+        raise RuntimeError(f"Failed to open {path}")
+
+    names = read_names(fs)
+    if not names:
+        raise RuntimeError("Could not read 'names' or find any Rot_* entries.")
+
+    # Collect camera centers and axes
+    centers = []
+    axes_world = []  # (R_c2w) for each cam
+    kept_names = []
+
+    for nm in names:
+        # Many dumps include both R_* (Rodrigues vector) and Rot_* (3x3).
+        # We prefer the explicit rotation matrix Rot_*; fall back to R_* if needed.
+        Rot = read_mat(fs, f"Rot_{nm}")
+        if Rot is None:
+            rvec = read_mat(fs, f"R_{nm}")
+            if rvec is None:
+                print(f"Skipping {nm}: no Rot_{nm} or R_{nm}")
+                continue
+            Rot, _ = cv2.Rodrigues(rvec.reshape(3))
+
+        T = read_mat(fs, f"T_{nm}")
+        if T is None:
+            print(f"Skipping {nm}: no T_{nm}")
+            continue
+        T = T.reshape(3, 1)
+
+        # Interpret as world->camera: x_cam = R x_world + T
+        # => camera center in world: C = -R^T T, camera orientation in world: R_c2w = R^T
+        R = Rot
+        Rt = R.T
+        C = (-Rt @ T).reshape(3)
+        R_c2w = Rt
+
+        centers.append(C)
+        axes_world.append(R_c2w)
+        kept_names.append(nm)
+
+    fs.release()
+
+    centers = np.array(centers)  # (N,3)
+    axes_world = np.array(axes_world)  # (N,3,3)
+
+    # Plot
+    fig = plt.figure(figsize=(9, 8))
+    ax = fig.add_subplot(111, projection="3d")
+    ax.set_title("Camera centers & axes (IDs from YAML 'names')")
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+
+    # Choose a reasonable axis length based on scene size
+    if len(centers) > 0:
+        span = np.ptp(centers, axis=0)
+        axes_len = max(span.max() * 0.05, 0.05)
+    else:
+        axes_len = 0.1
+
+    for i, (C, Rw, nm) in enumerate(zip(centers, axes_world, kept_names)):
+        # Draw axes (columns of R_c2w are X, Y, Z in world)
+        ax.quiver(C[0], C[1], C[2], Rw[0, 0], Rw[1, 0], Rw[2, 0], length=axes_len, normalize=True)  # X (right)
+        ax.quiver(C[0], C[1], C[2], Rw[0, 1], Rw[1, 1], Rw[2, 1], length=axes_len, normalize=True)  # Y (up)
+        ax.quiver(C[0], C[1], C[2], Rw[0, 2], Rw[1, 2], Rw[2, 2], length=axes_len, normalize=True)  # Z (forward)
+        ax.text(C[0], C[1], C[2], nm,
+                fontsize=6,
+                color="black",
+                zorder=10,  # ensure text is drawn last / on top
+                clip_on=False)
+
+    # Equal aspect
+    if len(centers) > 0:
+        mins = centers.min(axis=0)
+        maxs = centers.max(axis=0)
+        ctr = (mins + maxs) * 0.5
+        size = (maxs - mins).max()
+        size = max(size, 1e-6)
+        pad = 0.15 * size
+        ax.set_xlim(ctr[0] - size / 2 - pad, ctr[0] + size / 2 + pad)
+        ax.set_ylim(ctr[1] - size / 2 - pad, ctr[1] + size / 2 + pad)
+        ax.set_zlim(ctr[2] - size / 2 - pad, ctr[2] + size / 2 + pad)
+
+    ax.view_init(elev=20, azim=-60)
+    plt.show()
+
 class FileStorage(object):
     def __init__(self, filename, isWrite=False):
         version = cv2.__version__
@@ -153,6 +267,8 @@ def main():
     intrinsics_path = os.path.join(path_to_dataset, 'intri.yml')
     extrinsics_path = os.path.join(path_to_dataset, 'extri.yml')
     read_camera(intrinsics_path, extrinsics_path)
+    path = "/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/SelfCap/corgi-release/optimized/extri.yml"
+    # visualize_extrinsics_yaml(path)
 
 if __name__ == '__main__':
     main()

@@ -8,14 +8,6 @@ OUT_RESIZE_TO_1080P = True  # set False if you want 2560x1440 instead of 1920x10
 
 
 def visualize_camera_positions(models_json_path, plane="xy"):
-    """
-    Visualize camera positions from models.json in 2D.
-
-    plane:
-      "xy" -> x horizontal, y vertical
-      "xz" -> x horizontal, z vertical  (good top-down view)
-      "yz" -> y horizontal, z vertical
-    """
     models_json_path = Path(models_json_path)
 
     with models_json_path.open("r") as f:
@@ -77,10 +69,6 @@ def load_models(models_path):
 
 
 def build_fisheye_maps(view, balance=0.0):
-    """
-    Build undistort/rectify maps for a single camera using cv2.fisheye.
-    'balance' controls how much FOV to keep (0 = crop more, 1 = keep more, more black edges).
-    """
     w = int(view["width"])
     h = int(view["height"])
 
