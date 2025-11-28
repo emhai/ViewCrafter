@@ -46,6 +46,87 @@ def ffmpeg_side_by_side_vid(vid1, vid2, output_vid):
     ffmpeg_command = ["ffmpeg", "-y", "-i", str(vid1), "-i", str(vid2), "-filter_complex", "hstack=shortest=1", "-c:v", "libx264", str(output_vid)]
     subprocess.run(ffmpeg_command)
 
+def ffmpeg_4x4_video(input_folder, output_folder):
+
+    video_files = sorted([
+        p for p in input_folder.iterdir()
+        if p.is_file() and p.suffix.lower() == ".mp4"
+    ])
+
+    if len(video_files) != 16:
+        print("Couldn't create video, not 16 input videos")
+        return
+
+    # -------- 4x4 GRID (all 16 videos) --------
+    output_vid_4x4 = output_folder / "gen_4x4.mp4"
+    cmd_4x4 = ["ffmpeg", "-y"]
+    for vf in video_files:
+        cmd_4x4 += ["-i", str(vf)]
+    # xstack with a 4x4 grid
+    filter_complex_4x4 = "xstack=grid=4x4:shortest=1:fill=black"
+    cmd_4x4 += [
+        "-filter_complex", filter_complex_4x4,
+        "-c:v", "libx264",
+        "-crf", "18",
+        "-preset", "medium",
+        str(output_vid_4x4),
+    ]
+    subprocess.run(cmd_4x4)
+
+    # -------- 2x2 GRID (indices 0, 5, 10, 15) --------
+    indices_2x2 = (0, 5, 10, 15)
+    output_vid_2x2 = output_folder / "gen_2x2.mp4"
+    selected_files = [video_files[i] for i in indices_2x2]
+    cmd_2x2 = ["ffmpeg", "-y"]
+    for vf in selected_files:
+        cmd_2x2 += ["-i", str(vf)]
+    # 2x2 grid
+    filter_complex_2x2 = "xstack=grid=2x2:shortest=1:fill=black"
+    cmd_2x2 += [
+        "-filter_complex", filter_complex_2x2,
+        "-c:v", "libx264",
+        "-crf", "18",
+        "-preset", "medium",
+        str(output_vid_2x2),
+    ]
+    subprocess.run(cmd_2x2)
+
+def ffmpeg_2x2_from_indices(folder, output_vid, indices=(0, 5, 10, 15)):
+
+    folder = Path(folder)
+    output_vid = Path(output_vid)
+
+    video_files = sorted(
+        p for p in folder.iterdir()
+        if p.is_file() and p.suffix.lower() in {".mp4", ".mov", ".mkv", ".avi"}
+    )
+
+    if len(video_files) < 16:
+        raise ValueError(f"Expected at least 16 videos, found {len(video_files)} in {folder}")
+
+    try:
+        selected_files = [video_files[i] for i in indices]
+    except IndexError:
+        raise ValueError(
+            f"One of the requested indices {indices} is out of range for {len(video_files)} files."
+        )
+
+    # Build ffmpeg command
+    cmd = ["ffmpeg", "-y"]
+    for vf in selected_files:
+        cmd += ["-i", str(vf)]
+
+    filter_complex = "xstack=grid=2x2:shortest=1:fill=black"
+
+    cmd += [
+        "-filter_complex", filter_complex,
+        "-c:v", "libx264",
+        "-crf", "18",
+        "-preset", "medium",
+        str(output_vid),
+    ]
+
+    subprocess.run(cmd)
 def create_folder_structure(folders):
     for folder in folders:
         if not folder.exists():
@@ -237,8 +318,11 @@ def main():
     # output_path = Path("/media/emmahaidacher/Volume/TESTS/test_sep")
     # output_path.mkdir(exist_ok=True)
     # setup_structure(output_path, input_path, 16)
-    clean_empty_camera_folders()
+    #clean_empty_camera_folders()
     # clean_mask("")
+    vid_path_in = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_26_11/10_cfg__ddim__latent_blending_salmon_3x15_near/generated_videos")
+    vid_path_out = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_26_11/10_cfg__ddim__latent_blending_salmon_3x15_near/vis_results")
+    ffmpeg_4x4_video(vid_path_in, vid_path_out)
 
 if __name__ == "__main__":
     main()

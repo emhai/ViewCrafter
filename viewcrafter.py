@@ -856,6 +856,7 @@ class ViewCrafter:
         torch.cuda.ipc_collect()  # clean IPC memory
         del self.diffusion
 
+        ffmpeg_4x4_video(self.base_dir / GENERATED_VIDEOS_DIR, self.base_dir / VIS_RESULTS_DIR)
         if self.opts.gt_dir is not None:
             with self.timer.time("metrics"):
                 run_metrics(self.base_dir)

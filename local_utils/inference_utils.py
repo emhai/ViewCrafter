@@ -2,15 +2,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from fontTools.unicodedata import script
-
 from configs.v2v_config import *
-from configs.dataset_config import *
-import time
-import csv
-
-from local_utils.metric_utils import rerun_metrics
-
 
 def run_one_category_all_datasets():
     script = Path(PATH_TO_REPO / "master_scripts/multiple/9_cfg__ddim__latent_blending.sh")
@@ -169,8 +161,11 @@ def main():
     datasets_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_3x15/datasets")
 
     out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_26_11")
-    run_one(Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_3x15/datasets/harp_3x15_near"),
-            out_dir, Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple/8_cfg__ddim.sh"))
+    run_one(Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_3x15/datasets/salmon_3x15_near"),
+            out_dir, Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple/9_cfg__latent_blending.sh"))
+    run_one(Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_3x15/datasets/salmon_3x15_near"),
+            out_dir, Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple/10_cfg__ddim__latent_blending.sh"))
+
     #run_all(datasets_path, out_dir, to_run_all)
     datasets_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_3x15/datasets")
     inputs = ["steak_3x15_middle", "steak_3x15_near", "welder_3x15_near", "yoga_3x15_near", "harp_3x15_near"]
