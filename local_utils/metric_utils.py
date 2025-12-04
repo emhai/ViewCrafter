@@ -17,7 +17,7 @@ from cdfvd import fvd
 from fvmd import fvmd
 
 from configs.v2v_config import *
-from local_utils.v2v_utils import ffmpeg_side_by_side_vid
+from local_utils.v2v_utils import ffmpeg_side_by_side_vid, ffmpeg_overlay_5050
 from vbench import VBench
 
 """ 
@@ -442,8 +442,10 @@ def run_metrics(base_dir):
         gt_video = base_dir / GROUND_TRUTH_VIDEOS_DIR / f"{gt_name}.mp4"
         gen_video = base_dir / GENERATED_VIDEOS_DIR / f"{best_candidate.name}.mp4"
         ren_video = base_dir / RENDERED_VIDEOS_DIR / f"{best_candidate.name}.mp4"
-        ffmpeg_side_by_side_vid(gt_video, gen_video, base_dir / VIS_RESULTS_DIR / f"gen_{gt_name}_{best_candidate.name}.mp4")
-        ffmpeg_side_by_side_vid(gt_video, ren_video, base_dir / VIS_RESULTS_DIR / f"ren_{gt_name}_{best_candidate.name}.mp4")
+        ffmpeg_side_by_side_vid(gt_video, gen_video, base_dir / VIS_RESULTS_DIR / f"gen_{gt_name}_{best_candidate.name}_side_by_side.mp4")
+        ffmpeg_side_by_side_vid(gt_video, ren_video, base_dir / VIS_RESULTS_DIR / f"ren_{gt_name}_{best_candidate.name}_side_by_side.mp4")
+        ffmpeg_overlay_5050(gt_video, gen_video, base_dir / VIS_RESULTS_DIR / f"gen_{gt_name}_{best_candidate.name}_overlay.mp4")
+        ffmpeg_overlay_5050(gt_video, ren_video, base_dir / VIS_RESULTS_DIR / f"ren_{gt_name}_{best_candidate.name}_overlay.mp4")
 
     fid = calc_fid(base_dir / GROUND_TRUTH_FRAMES_DIR, base_dir / GENERATED_FRAMES_DIR, base_dir / MISC_DIR)
     fvd = calc_fvd(base_dir / GROUND_TRUTH_VIDEOS_DIR, base_dir / GENERATED_VIDEOS_DIR)

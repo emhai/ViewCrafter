@@ -41,6 +41,7 @@ class MaskType(Enum):
     COMP_WITH_FIRST = 2
     EASI3R_PREV = 3
     EASI3R_FIRST = 4
+    EASI3R_BOTH = 5
 
 class MSAType(Enum):
     PIX_2_VIDEO = 1

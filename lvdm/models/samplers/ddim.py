@@ -202,7 +202,8 @@ class DDIMSampler(object):
                eta=0.,
                mask=None,
                x0=None,
-               conds_z0=0,
+               first_conds_z0=None,
+               prev_conds_z0=None,
                temperature=1.,
                noise_dropout=0.,
                score_corrector=None,
@@ -251,7 +252,8 @@ class DDIMSampler(object):
                                                     quantize_denoised=quantize_x0,
                                                     mask=mask,
                                                     x0=x0,
-                                                    conds_z0=conds_z0,
+                                                    prev_conds_z0=prev_conds_z0,
+                                                    first_conds_z0=first_conds_z0,
                                                     ddim_use_original_steps=False,
                                                     noise_dropout=noise_dropout,
                                                     temperature=temperature,
@@ -270,7 +272,7 @@ class DDIMSampler(object):
         return samples, intermediates
 
     @torch.no_grad()
-    def ddim_sampling(self, cond, shape, conds_z0=None,
+    def ddim_sampling(self, cond, shape, first_conds_z0=None, prev_conds_z0=None,
                       x_T=None, ddim_use_original_steps=False,
                       callback=None, timesteps=None, quantize_denoised=False,
                       mask=None, x0=None, img_callback=None, log_every_t=100,
@@ -302,7 +304,7 @@ class DDIMSampler(object):
             iterator = time_range
 
         # clean_cond = kwargs.pop("clean_cond", False)
-        clean_cond = (conds_z0 is not None)
+        clean_cond = (prev_conds_z0 is not None)
 
         if msa == MSAType.MASACTRL:
             msa_tracker = MSATracker(start_step=4, start_layer=10) # from MasaCtrl
@@ -313,8 +315,6 @@ class DDIMSampler(object):
         else:
             msa_tracker = None
 
-        print("mask is", mask)
-        print("clean_cond is", clean_cond)
         # cond_copy, unconditional_conditioning_copy = copy.deepcopy(cond), copy.deepcopy(unconditional_conditioning)
         for i, step in enumerate(iterator):
 
@@ -327,15 +327,26 @@ class DDIMSampler(object):
 
             ## use mask to blend noised original latent (img_orig) & new sampled latent (img)
             if mask is not None:
+                # references
+                mask_move = mask  # 1 where moving
+                mask_static = 1.0 - mask  # 1 where static
 
-                if clean_cond:
-                    # print("using corresponding latent at each step")
-                    img_orig = conds_z0[i]
-                else:
-                    # print("using x0 with q_sample")
-                    img_orig = self.model.q_sample(x0, ts)  # TODO: deterministic forward pass? <ddim inversion>
-                # img = img_orig * mask + (1. - mask) * img # keep original & modify use img
-                img = img_orig * (1. - mask) + mask * img # keep original & modify use img swapped
+                # ----- STATIC: anchor to first_conds_z0 -----
+                if first_conds_z0 is not None:
+                    z_first = first_conds_z0[i]  # [B, C, T, H, W]
+                    w_static = 0.2  # already works for you, keep or tweak
+
+                    # only affect static area
+                    img = img + mask_static * w_static * (z_first - img)
+
+                # ----- MOVING: gently anchor to prev_conds_z0 -----
+                if prev_conds_z0 is not None:
+                    if i < 0.5 * total_steps:
+                        z_prev = prev_conds_z0[i]  # must be prev *frame/run* latents at this step
+                        w_move = 0.05  # start VERY small: 0.05–0.1
+
+                        # only affect moving area
+                        img = img + mask_move * w_move * (z_prev - img)
 
 
             outs = self.p_sample_ddim(img, cond, ts, index=index, use_original_steps=ddim_use_original_steps,

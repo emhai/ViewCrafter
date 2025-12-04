@@ -141,7 +141,7 @@ def guided_DDIM_inversion(model, videos, result, guidance_image, prompts, ddim_s
 def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddim_steps=50, ddim_eta=1., temperature=1.,
                            unconditional_guidance_scale=1.0, cfg_img=None, fs=None, text_input=False, multiple_cond_cfg=False,
                            timestep_spacing='uniform', guidance_rescale=0.0, condition_index=None, guidance_image=None,
-                            latents=None, only_x0 = False, mask=None, x_T=None, ddim_sampler=None, msa=None, **kwargs):
+                            first_latents=None, prev_latents=None, only_x0 = False, mask=None, x_T=None, ddim_sampler=None, msa=None, **kwargs):
 
     batch_size = noise_shape[0]
     fs = torch.tensor([fs] * batch_size, dtype=torch.long, device=model.device)
@@ -197,17 +197,21 @@ def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddi
     batch_variants = []
     for _ in range(n_samples):
 
-        if mask is not None and latents is not None:
+        if mask is not None and prev_latents is not None and first_latents is not None:
             if only_x0:
-                x0 = latents[-1]
-                conds_z0 = None
-            else:
                 x0 = None
-                conds_z0 = latents
+                prev_conds_z0 = None
+                first_conds_z0 = None
+            else:
+                print("here")
+                x0 = None
+                prev_conds_z0 = prev_latents
+                first_conds_z0 = first_latents
             cond_mask = mask.clone()
         else:
             cond_mask = None
-            conds_z0 = None
+            prev_conds_z0 = None
+            first_conds_z0 = None
             x0 = None
 
         if ddim_sampler is not None:
@@ -223,7 +227,8 @@ def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddi
                                             cfg_img=cfg_img, 
                                             mask=cond_mask,
                                             x0=x0,                                      # previous latent at t0
-                                            conds_z0=conds_z0,                          # all previous latents
+                                            prev_conds_z0=prev_conds_z0,                          # all previous latents
+                                            first_conds_z0=first_conds_z0,                          # all previous latents
                                             fs=fs,
                                             timestep_spacing=timestep_spacing,
                                             guidance_rescale=guidance_rescale,

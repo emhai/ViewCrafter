@@ -75,7 +75,7 @@ def run_one_dataset_all_categories():
         except subprocess.CalledProcessError as e:
             print(f"Script {modified} failed with return code {e.returncode}")
 
-def run_all(datasets_path, out_dir, scripts_to_run):
+def run_all(datasets_path, out_dir, scripts_to_run, no_frames):
     scripts_dir = Path(PATH_TO_REPO) / "master_scripts" / "multiple"
     if not out_dir.exists():
         out_dir.mkdir()
@@ -83,8 +83,7 @@ def run_all(datasets_path, out_dir, scripts_to_run):
     for dataset in datasets_path.iterdir():
         img_dir = dataset / "input"
         gt_dir = dataset / "gt"
-        no_frames = 45
-        for script in scripts_dir.iterdir():
+        for script in sorted(scripts_dir.iterdir(), reverse=True):
 
             script_name = int(script.name.split("_")[0])
             if script_name not in scripts_to_run:
@@ -117,13 +116,12 @@ def run_all(datasets_path, out_dir, scripts_to_run):
                 except FileNotFoundError:
                     pass
 
-def run_one(dataset_path, out_dir, script_to_run):
+def run_one(dataset_path, out_dir, script_to_run, no_frames):
     if not out_dir.exists():
         out_dir.mkdir()
 
     img_dir = dataset_path / "input"
     gt_dir = dataset_path / "gt"
-    no_frames = 45
 
     exp_name = f"{script_to_run.stem}_{dataset_path.name}"
     text = script_to_run.read_text()
@@ -157,21 +155,15 @@ def main():
     # to_run_coffee = [4, 9, 10]
     # run_all(datasets_path, out_dir, to_run_coffee)
 
-    to_run_all = [9, 10]
-    datasets_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_3x15/datasets")
+    to_run_all = [4, 9, 10]
+    datasets_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_4x15/good_datasets")
+    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_01_12")
+    run_all(datasets_path, out_dir, to_run_all, 60)
 
-    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_26_11")
-    run_one(Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_3x15/datasets/salmon_3x15_near"),
-            out_dir, Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple/9_cfg__latent_blending.sh"))
-    run_one(Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_3x15/datasets/salmon_3x15_near"),
-            out_dir, Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple/10_cfg__ddim__latent_blending.sh"))
-
-    #run_all(datasets_path, out_dir, to_run_all)
-    datasets_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_3x15/datasets")
-    inputs = ["steak_3x15_middle", "steak_3x15_near", "welder_3x15_near", "yoga_3x15_near", "harp_3x15_near"]
-    scripts = ["/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple/9_cfg__latent_blending.sh",
-               "/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple/10_cfg__ddim__latent_blending.sh"]
-
+    # in_vid = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_4x15/datasets/yoga_4x15_near")
+    # out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_28_11")
+    # script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple/10_cfg__ddim__latent_blending.sh")
+    # run_one(in_vid, out_dir, script, 60)
     # for i in inputs:
     #     for s in scripts:
     #         run_one(datasets_path / i, out_dir, Path(s))

@@ -6,28 +6,6 @@ import numpy as np
 from pathlib import Path
 from configs.v2v_config import *
 
-def init_timings_file(base_dir):
-    timings_file = base_dir / TIMINGS_CSV_FILE
-
-    if not timings_file.exists():
-        with timings_file.open("w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(
-                [
-                    "exp_name",
-                    "frames",
-                    "t_total",
-                    "t_easi3r",
-                    "t_ddim",
-                    "t_dust3r",
-                    "t_diffusion",
-                    "t_metrics",
-                    "t_misc"
-                ]
-            )
-
-    return timings_file
-
 def dir_empty(dir_path):
      path = Path(dir_path)
      has_next = next(path.iterdir(), None)
@@ -44,6 +22,18 @@ def extract_frames(video_path, frames_path):
 
 def ffmpeg_side_by_side_vid(vid1, vid2, output_vid):
     ffmpeg_command = ["ffmpeg", "-y", "-i", str(vid1), "-i", str(vid2), "-filter_complex", "hstack=shortest=1", "-c:v", "libx264", str(output_vid)]
+    subprocess.run(ffmpeg_command)
+
+def ffmpeg_overlay_5050(vid1, vid2, output_vid):
+    ffmpeg_command = [
+        "ffmpeg", "-y",
+        "-i", str(vid1),
+        "-i", str(vid2),
+        "-filter_complex",
+        "[0:v][1:v]blend=all_mode=average:shortest=1",
+        "-c:v", "libx264",
+        str(output_vid),
+    ]
     subprocess.run(ffmpeg_command)
 
 def ffmpeg_4x4_video(input_folder, output_folder):
@@ -91,42 +81,6 @@ def ffmpeg_4x4_video(input_folder, output_folder):
     ]
     subprocess.run(cmd_2x2)
 
-def ffmpeg_2x2_from_indices(folder, output_vid, indices=(0, 5, 10, 15)):
-
-    folder = Path(folder)
-    output_vid = Path(output_vid)
-
-    video_files = sorted(
-        p for p in folder.iterdir()
-        if p.is_file() and p.suffix.lower() in {".mp4", ".mov", ".mkv", ".avi"}
-    )
-
-    if len(video_files) < 16:
-        raise ValueError(f"Expected at least 16 videos, found {len(video_files)} in {folder}")
-
-    try:
-        selected_files = [video_files[i] for i in indices]
-    except IndexError:
-        raise ValueError(
-            f"One of the requested indices {indices} is out of range for {len(video_files)} files."
-        )
-
-    # Build ffmpeg command
-    cmd = ["ffmpeg", "-y"]
-    for vf in selected_files:
-        cmd += ["-i", str(vf)]
-
-    filter_complex = "xstack=grid=2x2:shortest=1:fill=black"
-
-    cmd += [
-        "-filter_complex", filter_complex,
-        "-c:v", "libx264",
-        "-crf", "18",
-        "-preset", "medium",
-        str(output_vid),
-    ]
-
-    subprocess.run(cmd)
 def create_folder_structure(folders):
     for folder in folders:
         if not folder.exists():
@@ -320,9 +274,12 @@ def main():
     # setup_structure(output_path, input_path, 16)
     #clean_empty_camera_folders()
     # clean_mask("")
-    vid_path_in = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_26_11/10_cfg__ddim__latent_blending_salmon_3x15_near/generated_videos")
-    vid_path_out = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_26_11/10_cfg__ddim__latent_blending_salmon_3x15_near/vis_results")
-    ffmpeg_4x4_video(vid_path_in, vid_path_out)
+    # vid_path_in = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_26_11/10_cfg__ddim__latent_blending_salmon_3x15_near/generated_videos")
+    # vid_path_out = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_26_11/10_cfg__ddim__latent_blending_salmon_3x15_near/vis_results")
+    # ffmpeg_4x4_video(vid_path_in, vid_path_out)
+    # separate_cameras(Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_02_12/test"), DIFFUSION_FRAMES)
+
+
 
 if __name__ == "__main__":
     main()

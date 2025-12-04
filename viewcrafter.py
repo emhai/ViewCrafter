@@ -156,34 +156,30 @@ class ViewCrafter:
                 latents = self.first_latents
 
         guidance_image = self.guidance_image if self.opts.reuse_guidance_image else None
-        if self.opts.use_latent_blending and latents is not None:
-            print("run_number:", self.run_number)
-            print("type(latents):", type(latents))
-            if isinstance(latents, dict):
-                print("latents keys:", latents.keys())
-            else:
-                print("len(latents):", len(latents))
-                print("latents[0].shape:", latents[0].shape)
+
+        first_latents = self.first_latents
+        prev_latents = self.prev_latents
         with torch.no_grad(), torch.cuda.amp.autocast():
             batch_samples, current_x0, intermediates = image_guided_synthesis(
                                                                             self.diffusion,
-                                                                            prompts,
-                                                                            videos,
-                                                                            self.noise_shape,
-                                                                            self.opts.n_samples,
-                                                                            self.opts.ddim_steps,
-                                                                            self.opts.ddim_eta,
-                                                                            self.opts.temperature,
-                                                                            self.opts.unconditional_guidance_scale,
-                                                                            self.opts.cfg_img,
-                                                                            self.opts.frame_stride,
-                                                                            self.opts.text_input,
-                                                                            self.opts.multiple_cond_cfg,
-                                                                            self.opts.timestep_spacing,
-                                                                            self.opts.guidance_rescale,
-                                                                            condition_index,
+                                                                            prompts=prompts,
+                                                                            videos=videos,
+                                                                            noise_shape=self.noise_shape,
+                                                                            n_samples=self.opts.n_samples,
+                                                                            ddim_steps=self.opts.ddim_steps,
+                                                                            ddim_eta=self.opts.ddim_eta,
+                                                                            temperature=self.opts.temperature,
+                                                                            unconditional_guidance_scale=self.opts.unconditional_guidance_scale,
+                                                                            cfg_img=self.opts.cfg_img,
+                                                                            fs=self.opts.frame_stride,
+                                                                            text_input=self.opts.text_input,
+                                                                            multiple_cond_cfg=self.opts.multiple_cond_cfg,
+                                                                            timestep_spacing=self.opts.timestep_spacing,
+                                                                            guidance_rescale=self.opts.guidance_rescale,
+                                                                            condition_index=condition_index,
                                                                             guidance_image=guidance_image,
-                                                                            latents=latents,
+                                                                            first_latents=first_latents,
+                                                                            prev_latents=prev_latents,
                                                                             only_x0=False,
                                                                             mask=masks,
                                                                             x_T=self.DDIM_noise,
@@ -263,19 +259,28 @@ class ViewCrafter:
 
         return latent_masks
 
-    def create_binary_masks(self, easi3r_path=None):
+    def create_binary_masks(self):
 
         current_image = self.img_ori
         mask_save_path = Path(self.opts.save_dir) / MASKS_DIR
 
-        if self.mask_type in [MaskType.EASI3R_PREV, MaskType.EASI3R_FIRST]:
+        if self.mask_type == MaskType.EASI3R_PREV:
             prev_mask_dir = self.base_dir / EASI3R_MASKS_DIR / str(self.run_number - 1)
-            mask_dir = self.base_dir / EASI3R_MASKS_DIR / str(self.run_number)
+            cur_mask_dir = self.base_dir / EASI3R_MASKS_DIR / str(self.run_number)
             assert prev_mask_dir.exists() and prev_mask_dir.is_dir() and len(list(prev_mask_dir.iterdir())) != 0
-            assert mask_dir.exists() and mask_dir.is_dir() and len(list(mask_dir.iterdir())) != 0
+            assert cur_mask_dir.exists() and cur_mask_dir.is_dir() and len(list(cur_mask_dir.iterdir())) != 0
             prev_mask_folders = sorted(prev_mask_dir.iterdir())
-            mask_folders = sorted(mask_dir.iterdir())
-            return load_easi3r_masks(mask_folders, prev_mask_folders, current_image, H=self.opts.height // 2, W=self.opts.width // 2, output_dir=mask_save_path)
+            cur_mask_folders = sorted(cur_mask_dir.iterdir())
+            return load_easi3r_masks(cur_mask_folders, prev_mask_folders, current_image, H=self.opts.height // 2, W=self.opts.width // 2, output_dir=mask_save_path)
+
+        if self.mask_type == MaskType.EASI3R_FIRST:
+            first_mask_dir = self.base_dir / EASI3R_MASKS_DIR / "0"
+            cur_mask_dir = self.base_dir / EASI3R_MASKS_DIR / str(self.run_number)
+            assert first_mask_dir.exists() and first_mask_dir.is_dir() and len(list(first_mask_dir.iterdir())) != 0
+            assert cur_mask_dir.exists() and cur_mask_dir.is_dir() and len(list(cur_mask_dir.iterdir())) != 0
+            first_mask_folders = sorted(first_mask_dir.iterdir())
+            cur_mask_folders = sorted(cur_mask_dir.iterdir())
+            return load_easi3r_masks(cur_mask_folders, first_mask_folders, current_image, H=self.opts.height // 2, W=self.opts.width // 2, output_dir=mask_save_path)
 
         if self.mask_type == MaskType.COMP_WITH_FIRST:
             return create_frame_diff_masks(self.first_image, current_image, output_dir=mask_save_path, threshold=0.01)
@@ -656,10 +661,10 @@ class ViewCrafter:
 
         if no_cameras > 2:
             camera_traj, num_views = generate_traj_interp_closed(c2ws, H, W, focals, principal_points, self.opts.video_length, self.device)
-            print("SAME?", c2ws, H, W, focals, principal_points)
+            # print("SAME?", c2ws, H, W, focals, principal_points)
         else:
             camera_traj, num_views = generate_traj_interp(c2ws, H, W, focals, principal_points, self.opts.video_length, self.device)
-            print("SAME?", c2ws, H, W, focals, principal_points)
+            # print("SAME?", c2ws, H, W, focals, principal_points)
 
 
         render_results, viewmask = self.run_render(pcd, imgs, masks, H, W, camera_traj, num_views)
@@ -679,7 +684,7 @@ class ViewCrafter:
         save_pointcloud_with_normals(imgs, pcd, msk=masks, save_path=os.path.join(self.opts.save_dir, f'pcd.ply'), mask_pc=mask_pc, reduce_pc=False)
 
         latent_masks = self.complete_mask_creation(pcd, imgs, H, W, camera_traj, num_views)
-        print(latent_masks)
+        # print(latent_masks)
         with self.timer.time("diffusion"):
             diffusion_results = self.run_diffusion(render_results, latent_masks)
 

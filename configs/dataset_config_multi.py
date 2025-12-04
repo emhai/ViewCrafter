@@ -29,4 +29,4 @@ video_names = [["cam07.mp4", "cam06.mp4", "cam00.mp4", "cam05.mp4", "cam04.mp4"]
                ]
 
 distances = ["near", "middle", "far"]
-setup_duration = [[3, 15]] # [[2, 30], [2, 15], [4, 15]]
+setup_duration = [[4, 15]] # [[2, 30], [2, 15], [4, 15]]
