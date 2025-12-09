@@ -4,9 +4,13 @@ import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
+from PIL import Image
 
-from configs.v2v_config import EASI3R_MASKS_DIR
+from configs.v2v_config import EASI3R_MASKS_DIR, EASI3R_RESULTS_DIR, VIS_RESULTS_DIR
+from local_utils.v2v_utils import numeric_key
 from local_utils.visualization_utils import visualize_pixel_masks
+from torchvision.transforms import CenterCrop
+import torchvision.transforms as transforms
 
 
 def create_frame_diff_masks(current_imgs, prev_imgs, threshold=0.1, output_dir=None):
@@ -78,16 +82,59 @@ def binary_mask_to_latent(binary_mask, noise_shape):
 
     return mask_latent
 
-def visualize_all_masks(base_dir, out_dir):
-    mask_dir = base_dir / EASI3R_MASKS_DIR
-    for folder in mask_dir.iterdir():
-        pass
+def create_bg_mask(base_dir):
+    mask_dir = base_dir / EASI3R_RESULTS_DIR
+    all_folders = list(mask_dir.glob("*"))
+    amount = len(list(all_folders[0].glob("*")))
+    all_masks = []
+    for i in range(amount):
+        for folder in sorted(mask_dir.iterdir()):
+            all_masks.append(list(folder.glob("*"))[i])
 
+        print(all_masks)
+        all_masks = []
+
+def compute_bg_mask_last_n_frames(base_dir, current_frame=None, n_last_frames=None, H=256, W=512):
+
+    easier_results = base_dir / EASI3R_RESULTS_DIR
+    if current_frame is not None:
+        assert n_last_frames is not None
+        m, n = max(current_frame - n_last_frames, 0), current_frame
+    else:
+        m, n = None, None
+
+    all_masks = []
+    for folder in easier_results.iterdir():
+        dyn_mask_folder = folder / "frames_dynamic_masks"
+
+        dyn_mask_folder = sorted(list(dyn_mask_folder.iterdir()), key=numeric_key)[m:n]
+        combined_mask = None
+        for mask in dyn_mask_folder:
+            easier_mask = Image.open(str(mask)).convert("L")
+            crop = CenterCrop((H, W))
+            cropped_mask = crop(easier_mask)
+
+            to_tensor = transforms.ToTensor()  # Converts to float tensor in range [0, 1]
+            mask_tensor = to_tensor(cropped_mask)
+
+            if combined_mask is None:
+                combined_mask = mask_tensor
+            else:
+                combined_mask += mask_tensor
+        combined_mask = combined_mask.clamp(0, 1)
+        all_masks.append(combined_mask)
+
+        combined_mask = combined_mask[0]
+        mask_np = (combined_mask.numpy() * 255.0).astype(np.uint8)
+        img = Image.fromarray(mask_np, mode="L")
+        img.save(base_dir / VIS_RESULTS_DIR / f"bg_mask_{str(folder.stem)}.png")
+
+
+    return all_masks
 
 
 def main():
-
-    clean_mask("")
+    compute_bg_mask_last_n_frames(Path("/media/emmahaidacher/Volume/GOOD_RESULTS/20251014_1554_yoga_debug"), 10, 12)
 
 if __name__ == "__main__":
     main()

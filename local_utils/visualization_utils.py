@@ -143,6 +143,7 @@ def visualize_latents(base_dir, intermediates, model, prefix="x_inter"):
             img.close()
 
 
+
 def main():
     pass
 

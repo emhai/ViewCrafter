@@ -14,6 +14,7 @@ from configs.v2v_config import *
 from PIL import Image
 import torchvision.transforms as transforms
 
+from local_utils.v2v_utils import numeric_key
 from local_utils.visualization_utils import visualize_pixel_masks
 
 PATH_TO_EASI3R = Path("/home/emmahaidacher/Desktop/Easi3R")
@@ -141,11 +142,6 @@ def run_easi3r_from_viewcrafter(base_path, n_frames):
     easi3r_results = sorted(easi3r_results_dir.iterdir())
 
     dyn_mask_folders = [folder / "frames_dynamic_masks" for folder in easi3r_results]
-
-    def numeric_key(path):
-        # Extract the first integer found in the filename (e.g. 1, 2, 10, etc.)
-        match = re.search(r'\d+', path.stem)
-        return int(match.group()) if match else -1
 
     dyn_mask_files = [sorted(folder.iterdir(), key=numeric_key) for folder in dyn_mask_folders]
 

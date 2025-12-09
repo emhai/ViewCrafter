@@ -1,10 +1,17 @@
 import csv
+import re
 import shutil
 import subprocess
 import cv2
 import numpy as np
 from pathlib import Path
 from configs.v2v_config import *
+
+
+def numeric_key(path):
+    # Extract the first integer found in the filename (e.g. 1, 2, 10, etc.)
+    match = re.search(r'\d+', path.stem)
+    return int(match.group()) if match else -1
 
 def dir_empty(dir_path):
      path = Path(dir_path)
