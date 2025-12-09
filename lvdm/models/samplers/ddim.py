@@ -331,22 +331,26 @@ class DDIMSampler(object):
                 mask_move = mask  # 1 where moving
                 mask_static = 1.0 - mask  # 1 where static
 
-                # ----- STATIC: anchor to first_conds_z0 -----
                 if first_conds_z0 is not None:
-                    z_first = first_conds_z0[i]  # [B, C, T, H, W]
-                    w_static = 0.2  # already works for you, keep or tweak
+                    if i < 0.25 * total_steps:
+                        z_first = first_conds_z0[i]
+                        w_static = 0.2
+                        img = img + mask_static * w_static * (z_first - img)
 
-                    # only affect static area
-                    img = img + mask_static * w_static * (z_first - img)
-
-                # ----- MOVING: gently anchor to prev_conds_z0 -----
                 if prev_conds_z0 is not None:
+                    z_prev = prev_conds_z0[i]
                     if i < 0.5 * total_steps:
-                        z_prev = prev_conds_z0[i]  # must be prev *frame/run* latents at this step
-                        w_move = 0.05  # start VERY small: 0.05–0.1
+                        w_move = 0.05
+                        w_static = 0.6
 
-                        # only affect moving area
                         img = img + mask_move * w_move * (z_prev - img)
+                        img = img + mask_static * w_static * (z_prev - img)
+
+                    else:
+                        w_static = 0.3
+                        img = img + mask_static * w_static * (z_prev - img)
+
+
 
 
             outs = self.p_sample_ddim(img, cond, ts, index=index, use_original_steps=ddim_use_original_steps,

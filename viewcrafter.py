@@ -147,18 +147,15 @@ class ViewCrafter:
         videos = (renderings * 2.0 - 1.0).permute(3, 0, 1, 2).unsqueeze(0).to(self.device)
         condition_index = [0]
 
-        latents = None
-
         if self.opts.use_latent_blending:
-            if self.mask_type in [MaskType.COMP_WITH_PREV, MaskType.EASI3R_PREV]:
-                latents = self.prev_latents
-            elif self.mask_type in [MaskType.COMP_WITH_FIRST, MaskType.EASI3R_FIRST]:
-                latents = self.first_latents
+            first_latents = self.first_latents
+            prev_latents = self.prev_latents
+        else:
+            first_latents = None
+            prev_latents = None
 
         guidance_image = self.guidance_image if self.opts.reuse_guidance_image else None
 
-        first_latents = self.first_latents
-        prev_latents = self.prev_latents
         with torch.no_grad(), torch.cuda.amp.autocast():
             batch_samples, current_x0, intermediates = image_guided_synthesis(
                                                                             self.diffusion,
@@ -372,13 +369,11 @@ class ViewCrafter:
 
         return diffusion_results
 
-    def get_pickle_vals(self):
+    def get_pickle_vals(self, pickle_file):
 
         t_shape = self.images[0]['true_shape']
         t_H, t_W = int(t_shape[0][0]), int(t_shape[0][1])
 
-        pickle_dir = Path(self.base_dir) / PICKLES_DIR
-        pickle_file = list(pickle_dir.rglob("*.pkl"))[0]
         with open(pickle_file, 'rb') as f:
             pickle_im_poses = pickle.load(f)
             pickle_im_poses = pickle_im_poses[self.run_number].unsqueeze(0)
@@ -416,10 +411,12 @@ class ViewCrafter:
     def nvs_single_view_v2v(self, gradio=False):
         # 最后一个view为 0 pose
         # todo cleanup
-
-        if self.opts.use_easi3r:
+        pickle_dir = Path(self.base_dir) / PICKLES_DIR
+        pickle_file = list(pickle_dir.rglob("*.pkl"))[0]
+        if self.opts.use_easi3r and any(pickle_dir.iterdir()):
             print("Using Easi3r for PC")
-            pickle_imgs, c2ws, principal_points, focals, pickle_pts3d, pickle_depths = self.get_pickle_vals()
+
+            pickle_imgs, c2ws, principal_points, focals, pickle_pts3d, pickle_depths = self.get_pickle_vals(pickle_file)
 
             shape = pickle_imgs.shape
             H, W = int(shape[0]), int(shape[1])

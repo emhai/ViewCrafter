@@ -155,9 +155,9 @@ def main():
     # to_run_coffee = [4, 9, 10]
     # run_all(datasets_path, out_dir, to_run_coffee)
 
-    to_run_all = [4, 9, 10]
+    to_run_all = [0, 4, 9, 10]
     datasets_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_4x15/good_datasets")
-    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_01_12")
+    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_05_12")
     run_all(datasets_path, out_dir, to_run_all, 60)
 
     # in_vid = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_4x15/datasets/yoga_4x15_near")
