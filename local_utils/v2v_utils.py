@@ -277,10 +277,8 @@ def main():
     # vid_path_in = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_26_11/10_cfg__ddim__latent_blending_salmon_3x15_near/generated_videos")
     # vid_path_out = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_26_11/10_cfg__ddim__latent_blending_salmon_3x15_near/vis_results")
     # ffmpeg_4x4_video(vid_path_in, vid_path_out)
-    # separate_cameras(Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_02_12/test2"), DIFFUSION_FRAMES)
-    ffmpeg_overlay_5050("/media/emmahaidacher/Volume/GOOD_RESULTS/results_02_12/test2/generated_videos/cam09.mp4",
-                        "/media/emmahaidacher/Volume/GOOD_RESULTS/results_02_12/test2/gt_videos/0002.mp4",
-                        "/media/emmahaidacher/Volume/GOOD_RESULTS/results_02_12/test2/test.mp4")
+    separate_cameras(Path("/media/emmahaidacher/Volume/GOOD_RESULTS/20251209_1548_spinach_2_metrics"), DIFFUSION_FRAMES)
+
 
 
 

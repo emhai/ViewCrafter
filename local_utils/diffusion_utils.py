@@ -141,7 +141,7 @@ def guided_DDIM_inversion(model, videos, result, guidance_image, prompts, ddim_s
 def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddim_steps=50, ddim_eta=1., temperature=1.,
                            unconditional_guidance_scale=1.0, cfg_img=None, fs=None, text_input=False, multiple_cond_cfg=False,
                            timestep_spacing='uniform', guidance_rescale=0.0, condition_index=None, guidance_image=None,
-                            first_latents=None, prev_latents=None, only_x0 = False, mask=None, x_T=None, ddim_sampler=None, msa=None, **kwargs):
+                            first_latents=None, prev_latents=None, only_x0 = False, mask_move=None, mask_static=None, x_T=None, ddim_sampler=None, msa=None, **kwargs):
 
     batch_size = noise_shape[0]
     fs = torch.tensor([fs] * batch_size, dtype=torch.long, device=model.device)
@@ -197,7 +197,7 @@ def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddi
     batch_variants = []
     for _ in range(n_samples):
 
-        if mask is not None and prev_latents is not None and first_latents is not None:
+        if mask_move is not None and mask_static is not None and prev_latents is not None and first_latents is not None:
             if only_x0:
                 x0 = None
                 prev_conds_z0 = None
@@ -207,9 +207,12 @@ def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddi
                 x0 = None
                 prev_conds_z0 = prev_latents
                 first_conds_z0 = first_latents
-            cond_mask = mask.clone()
+            cond_mask_move = mask_move.clone()
+            cond_mask_static = mask_static.clone()
+
         else:
-            cond_mask = None
+            cond_mask_move = None
+            cond_mask_static = None
             prev_conds_z0 = None
             first_conds_z0 = None
             x0 = None
@@ -225,10 +228,11 @@ def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddi
                                             unconditional_conditioning=uc,
                                             eta=ddim_eta,
                                             cfg_img=cfg_img, 
-                                            mask=cond_mask,
+                                            mask_move=cond_mask_move,
+                                            mask_static=cond_mask_static,
                                             x0=x0,                                      # previous latent at t0
-                                            prev_conds_z0=prev_conds_z0,                          # all previous latents
-                                            first_conds_z0=first_conds_z0,                          # all previous latents
+                                            prev_conds_z0=prev_conds_z0,                # all previous latents
+                                            first_conds_z0=first_conds_z0,              # all previous latents
                                             fs=fs,
                                             timestep_spacing=timestep_spacing,
                                             guidance_rescale=guidance_rescale,

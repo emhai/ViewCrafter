@@ -200,7 +200,8 @@ class DDIMSampler(object):
                img_callback=None,
                quantize_x0=False,
                eta=0.,
-               mask=None,
+               mask_move=None,
+               mask_static=None,
                x0=None,
                first_conds_z0=None,
                prev_conds_z0=None,
@@ -250,7 +251,8 @@ class DDIMSampler(object):
                                                     callback=callback,
                                                     img_callback=img_callback,
                                                     quantize_denoised=quantize_x0,
-                                                    mask=mask,
+                                                    mask_move=mask_move,
+                                                    mask_static=mask_static,
                                                     x0=x0,
                                                     prev_conds_z0=prev_conds_z0,
                                                     first_conds_z0=first_conds_z0,
@@ -275,7 +277,7 @@ class DDIMSampler(object):
     def ddim_sampling(self, cond, shape, first_conds_z0=None, prev_conds_z0=None,
                       x_T=None, ddim_use_original_steps=False,
                       callback=None, timesteps=None, quantize_denoised=False,
-                      mask=None, x0=None, img_callback=None, log_every_t=100,
+                      mask_move=None, mask_static=None, x0=None, img_callback=None, log_every_t=100,
                       temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None,
                       unconditional_guidance_scale=1., unconditional_conditioning=None, verbose=True,
                       precision=None,fs=None,guidance_rescale=0.0, msa=None, **kwargs):
@@ -326,10 +328,8 @@ class DDIMSampler(object):
             ts = torch.full((b,), step, device=device, dtype=torch.long)
 
             ## use mask to blend noised original latent (img_orig) & new sampled latent (img)
-            if mask is not None:
+            if mask_move is not None and mask_static is not None:
                 # references
-                mask_move = mask  # 1 where moving
-                mask_static = 1.0 - mask  # 1 where static
 
                 if first_conds_z0 is not None:
                     if i < 0.25 * total_steps:
@@ -347,7 +347,7 @@ class DDIMSampler(object):
                         img = img + mask_static * w_static * (z_prev - img)
 
                     else:
-                        w_static = 0.3
+                        w_static = 0.1
                         img = img + mask_static * w_static * (z_prev - img)
 
 
@@ -359,7 +359,7 @@ class DDIMSampler(object):
                                       corrector_kwargs=corrector_kwargs,
                                       unconditional_guidance_scale=unconditional_guidance_scale,
                                       unconditional_conditioning=unconditional_conditioning,
-                                      mask=mask,x0=x0,fs=fs, guidance_rescale=guidance_rescale, msa_tracker=msa_tracker,
+                                      mask_move=mask_move, mask_static=mask_static,x0=x0,fs=fs, guidance_rescale=guidance_rescale, msa_tracker=msa_tracker,
                                       **kwargs)
             
 

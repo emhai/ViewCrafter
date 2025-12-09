@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+from configs.v2v_config import EASI3R_MASKS_DIR
 from local_utils.visualization_utils import visualize_pixel_masks
 
 
@@ -50,13 +51,39 @@ def create_frame_diff_masks(current_imgs, prev_imgs, threshold=0.1, output_dir=N
 
 def clean_mask(input_mask):
 
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
 
     closing = cv2.morphologyEx(input_mask, cv2.MORPH_CLOSE, kernel)
     dilation = cv2.dilate(closing, kernel, iterations=1)
     filled = cv2.medianBlur(dilation, 7)
 
     return filled
+
+def rendered_mask_to_binary(rendered_mask):
+
+    threshold = 1e-6
+    return (rendered_mask.abs() > threshold).any(dim=-1)
+
+def binary_mask_to_latent(binary_mask, noise_shape):
+
+    _, _, n, h, w = noise_shape
+    binary_mask = binary_mask.float()
+    binary_mask = binary_mask.unsqueeze(0).unsqueeze(0)
+
+    mask_latent = F.interpolate(
+        binary_mask,
+        size=(n, h, w),
+        mode='nearest'
+    )
+
+    return mask_latent
+
+def visualize_all_masks(base_dir, out_dir):
+    mask_dir = base_dir / EASI3R_MASKS_DIR
+    for folder in mask_dir.iterdir():
+        pass
+
+
 
 def main():
 

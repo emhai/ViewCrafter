@@ -11,7 +11,8 @@ import torch.nn.functional as F
 from torchvision.utils import save_image
 import torchvision.transforms.functional as TF
 
-from configs.v2v_config import LATENTS_DIR
+from configs.v2v_config import LATENTS_DIR, MASKS_DIR, EASI3R_MASKS_DIR
+
 
 def save_masks(mask_list, save_dir, visualize=True, save=True):
     save_dir = Path(save_dir)
@@ -140,6 +141,7 @@ def visualize_latents(base_dir, intermediates, model, prefix="x_inter"):
     )
     for img in gif_frames:
             img.close()
+
 
 def main():
     pass

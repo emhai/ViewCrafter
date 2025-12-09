@@ -1,6 +1,6 @@
 import sys
 
-from local_utils.mask_utils import create_frame_diff_masks, clean_mask
+from local_utils.mask_utils import create_frame_diff_masks, clean_mask, rendered_mask_to_binary, binary_mask_to_latent
 from local_utils.metric_utils import run_metrics
 
 sys.path.append('./extern/dust3r')
@@ -141,7 +141,7 @@ class ViewCrafter:
         render_results, viewmask = self.render_pcd(pcd, imgs, masks, num_views,renderer, self.device,nbv=False)
         return render_results, viewmask
 
-    def run_diffusion(self, renderings, masks=None):
+    def run_diffusion(self, renderings, mask_move=None, mask_static=None):
 
         prompts = [self.opts.prompt]
         videos = (renderings * 2.0 - 1.0).permute(3, 0, 1, 2).unsqueeze(0).to(self.device)
@@ -178,7 +178,8 @@ class ViewCrafter:
                                                                             first_latents=first_latents,
                                                                             prev_latents=prev_latents,
                                                                             only_x0=False,
-                                                                            mask=masks,
+                                                                            mask_move=mask_move,
+                                                                            mask_static=mask_static,
                                                                             x_T=self.DDIM_noise,
                                                                             ddim_sampler=self.ddim_sampler,
                                                                             msa=self.msa_type
@@ -213,6 +214,9 @@ class ViewCrafter:
 
         return torch.clamp(batch_samples[0][0].permute(1, 2, 3, 0), -1.0, 1.0)
 
+    def background_mask_creation(self):
+        pass
+
     def complete_mask_creation(self, point_cloud, images, height, width, trajectory, no_views):
 
         if self.run_number == 0:
@@ -232,7 +236,7 @@ class ViewCrafter:
         visualize_masks_horizontal(masked_render_results, mask_save_dir / "diff_masks_all.png")
 
         # boolean_masks are the masked_render_results, thresholded to [0, 1]
-        boolean_masks = self.rendered_mask_to_binary(masked_render_results)
+        boolean_masks = rendered_mask_to_binary(masked_render_results)
         visualize_masks_horizontal(boolean_masks, mask_save_dir / "bool_masks_all.png", cmap='Greys')
 
         cleaned = []
@@ -250,9 +254,8 @@ class ViewCrafter:
         # visualize_masks_horizontal(float_cleaned_mask, mask_save_dir / "float_cleaned_masks.png", cmap='grey')
 
         # latent_masks are the boolean_masks downsampled to latent shape
-        latent_masks = self.binary_mask_to_latent(cleaned_masks)
+        latent_masks = binary_mask_to_latent(cleaned_masks, self.noise_shape)
         visualize_masks_horizontal(latent_masks.squeeze(), mask_save_dir / "latent_masks_all.png", cmap='Greys')
-
 
         return latent_masks
 
@@ -286,25 +289,6 @@ class ViewCrafter:
             return create_frame_diff_masks(self.prev_image, current_image, output_dir=mask_save_path, threshold=0.01)
 
         return None
-
-    def rendered_mask_to_binary(self, rendered_mask):
-
-        threshold = 1e-6
-        return (rendered_mask.abs() > threshold).any(dim=-1)
-
-    def binary_mask_to_latent(self, binary_mask):
-
-        _, _, n, h, w = self.noise_shape
-        binary_mask = binary_mask.float()
-        binary_mask = binary_mask.unsqueeze(0).unsqueeze(0)
-
-        mask_latent = F.interpolate(
-            binary_mask,
-            size=(n, h, w),
-            mode='nearest'
-        )
-
-        return mask_latent
 
     def nvs_single_view(self, gradio=False):
         # 最后一个view为 0 pose
@@ -510,10 +494,11 @@ class ViewCrafter:
                                      save_path=os.path.join(self.opts.save_dir, 'pcd.ply'), mask_pc=False,
                                      reduce_pc=False)
 
-        latent_masks = self.complete_mask_creation([pcd[-1]], [imgs[-1]], H, W, camera_traj, num_views)
+        latent_masks_move = self.complete_mask_creation([pcd[-1]], [imgs[-1]], H, W, camera_traj, num_views)
+        latent_masks_static = 1 - latent_masks_move if latent_masks_move is not None else None
 
         with self.timer.time("diffusion"):
-            diffusion_results = self.run_diffusion(render_results, latent_masks)
+            diffusion_results = self.run_diffusion(render_results, latent_masks_move, latent_masks_static)
 
         save_video((diffusion_results + 1.0) / 2.0, os.path.join(self.opts.save_dir, 'diffusion.mp4'),
                    os.path.join(self.opts.save_dir, DIFFUSION_FRAMES))
@@ -680,10 +665,11 @@ class ViewCrafter:
         save_video(render_results, os.path.join(self.opts.save_dir, f'render.mp4'), os.path.join(self.opts.save_dir, RENDER_FRAMES))
         save_pointcloud_with_normals(imgs, pcd, msk=masks, save_path=os.path.join(self.opts.save_dir, f'pcd.ply'), mask_pc=mask_pc, reduce_pc=False)
 
-        latent_masks = self.complete_mask_creation(pcd, imgs, H, W, camera_traj, num_views)
+        latent_masks_move = self.complete_mask_creation(pcd, imgs, H, W, camera_traj, num_views)
         # print(latent_masks)
+        latent_masks_static = 1 - latent_masks_move if latent_masks_move is not None else None
         with self.timer.time("diffusion"):
-            diffusion_results = self.run_diffusion(render_results, latent_masks)
+            diffusion_results = self.run_diffusion(render_results, latent_masks_move, latent_masks_static)
 
         save_video((diffusion_results + 1.0) / 2.0, os.path.join(self.opts.save_dir, f'diffusion.mp4'),
                    os.path.join(self.opts.save_dir, DIFFUSION_FRAMES))
