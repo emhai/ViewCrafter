@@ -630,42 +630,133 @@ class ViewCrafter:
         return diffusion_results
 
     def nvs_sparse_view_interp_v2v(self):
+        # 1. Load Easi3r Clouds
+        pickle_dir = Path(self.base_dir) / PICKLES_DIR
+        if self.opts.use_easi3r and any(pickle_dir.iterdir()):
+            print("Using Easi3r for PC")
+            pts3d_easi_all = []
+            pprincipal_points = []
+            ffocals = []
+            c2ws_easi = []
+            imgs_easi = []
 
-        # todo cleanup, add easi3r pointclouds?
-        c2ws = self.scene.get_im_poses().detach()
+            # Sort files (Crucial)
+            sorted_files = sorted(list(pickle_dir.rglob("*.pkl")))
+            for f in sorted_files:
+                pickle_imgs, pickle_c2ws, pickle_pps, pickle_focals, pickle_pts3d, _ = self.get_pickle_vals(f)
+                pts3d_easi_all.append(pickle_pts3d)
+                pprincipal_points.append(pickle_pps)
+                ffocals.append(pickle_focals)
+                c2ws_easi.append(pickle_c2ws)
+                imgs_easi.append(pickle_imgs)
+
+            pcd_e = pts3d_easi_all
+            # Intrinsics
+            focals_e = torch.cat(ffocals, 0)
+            principal_points_e = torch.cat(pprincipal_points, 0)
+            imgs_e = torch.stack([torch.from_numpy(i) for i in imgs_easi], 0)
+
+        # 2. Get Dust3r Poses
+        poses = self.scene.get_im_poses()
+        c2ws = poses.clone()  # Clone so we can modify it safely
+
+        print("Transforming Point Clouds...")
+
+        # --- HELPER: Apply Pose ---
+        def apply_pose(pcd, matrix):
+            orig_shape = pcd.shape
+            flat = pcd.reshape(-1, 3)
+            ones = torch.ones((flat.shape[0], 1), device=flat.device)
+            hom = torch.cat([flat, ones], dim=1)
+            res = (hom @ matrix.to(flat.device).T)[:, :3]
+            return res.view(orig_shape)
+
+        # A. Initial Alignment (Dust3r Rotation/Translation)
+        pc1_world = apply_pose(pcd_e[0], poses[0])
+        pc2_world = apply_pose(pcd_e[1], poses[1])
+
+        # --- FIX 1: GHOSTING (Centroid Alignment) ---
+        def get_translation_correction(ref_pc, mov_pc):
+            ref = ref_pc.reshape(-1, 3)
+            mov = mov_pc.reshape(-1, 3)
+
+            # Filter valid points
+            ref_valid = ref[ref[:, 2] > 0.1]
+            mov_valid = mov[mov[:, 2] > 0.1]
+
+            if len(ref_valid) == 0 or len(mov_valid) == 0:
+                return torch.zeros(3, device=ref.device)
+
+            ref_center = ref_valid.mean(dim=0)
+            mov_center = mov_valid.mean(dim=0)
+
+            return ref_center - mov_center
+
+        offset_vector = get_translation_correction(pc1_world[0], pc2_world[0])
+        print(f"Fixing Ghosting with Offset: {offset_vector}")
+
+        # Apply offset to Cloud 2
+        pc2_aligned = pc2_world + offset_vector
+        pc1_aligned = pc1_world
+
+        # --- FIX 2: TOO FAR AWAY (Global Centering) ---
+        # Find scene center
+        flat_pc1 = pc1_aligned[0].reshape(-1, 3)
+        valid_scene = flat_pc1[flat_pc1[:, 2] > 0.1]
+
+        if len(valid_scene) > 0:
+            scene_center = valid_scene.mean(dim=0)
+        else:
+            scene_center = torch.zeros(3, device=self.device)
+
+        print(f"Centering Scene from {scene_center} to (0,0,0)")
+
+        # Shift Clouds
+        pcd_final_1 = pc1_aligned - scene_center
+        pcd_final_2 = pc2_aligned - scene_center
+
+        # Shift Cameras (Trajectory) - THE FIX IS HERE
+        # We ensure scene_center is on the same device as c2ws
+        c2ws[:, :3, 3] -= scene_center.to(c2ws.device)
+        c2ws = c2ws.detach()
+        # Final PCD list
+        pcd = [pcd_final_1, pcd_final_2]
+
+        # --- Proceed with Rendering ---
+
+        # Intrinsics
         principal_points = self.scene.get_principal_points().detach()
-        focals = self.scene.get_focals().detach()
         shape = self.images[0]['true_shape']
         H, W = int(shape[0][0]), int(shape[0][1])
-        pcd = [i.detach() for i in self.scene.get_pts3d(clip_thred=self.opts.dpt_trd)]  # a list of points of size whc
-        depth = [i.detach() for i in self.scene.get_depthmaps()]
+        imgs = np.array(self.scene.imgs)
 
+        # Masks
         if len(self.images) == 2:
             masks = None
             mask_pc = False
         else:
-            ## masks for cleaner point cloud
             self.scene.min_conf_thr = float(self.scene.conf_trf(torch.tensor(self.opts.min_conf_thr)))
             masks = self.scene.get_masks()
             depth = self.scene.get_depthmaps()
-            bgs_mask = [dpt > self.opts.bg_trd*(torch.max(dpt[40:-40,:])+torch.min(dpt[40:-40,:])) for dpt in depth]
-            masks_new = [m+mb for m, mb in zip(masks,bgs_mask)]
+            bgs_mask = [dpt > self.opts.bg_trd * (torch.max(dpt[40:-40, :]) + torch.min(dpt[40:-40, :])) for dpt in
+                        depth]
+            masks_new = [m + mb for m, mb in zip(masks, bgs_mask)]
             masks = to_numpy(masks_new)
             mask_pc = True
 
-        imgs = np.array(self.scene.imgs)
         no_cameras = len(self.img_ori)
 
+        # Trajectory Generation
         if no_cameras > 2:
-            camera_traj, num_views = generate_traj_interp_closed(c2ws, H, W, focals, principal_points, self.opts.video_length, self.device)
-            # print("SAME?", c2ws, H, W, focals, principal_points)
+            camera_traj, num_views = generate_traj_interp_closed(c2ws, H, W, focals_e, principal_points,
+                                                                 self.opts.video_length, self.device)
         else:
-            camera_traj, num_views = generate_traj_interp(c2ws, H, W, focals, principal_points, self.opts.video_length, self.device)
-            # print("SAME?", c2ws, H, W, focals, principal_points)
-
+            camera_traj, num_views = generate_traj_interp(c2ws, H, W, focals_e, principal_points,
+                                                          self.opts.video_length, self.device)
 
         render_results, viewmask = self.run_render(pcd, imgs, masks, H, W, camera_traj, num_views)
-        render_results = F.interpolate(render_results.permute(0, 3, 1, 2), size=(self.opts.height, self.opts.width), mode='bilinear',   align_corners=False).permute(0, 2, 3, 1)
+        render_results = F.interpolate(render_results.permute(0, 3, 1, 2), size=(self.opts.height, self.opts.width),
+                                       mode='bilinear', align_corners=False).permute(0, 2, 3, 1)
 
         if no_cameras > 2:
             indices = [i * (self.opts.video_length // no_cameras) for i in range(no_cameras + 1)]
@@ -677,17 +768,19 @@ class ViewCrafter:
         for i, j in zip(indices, cams):
             render_results[i] = self.img_ori[j]
 
-        save_video(render_results, os.path.join(self.opts.save_dir, f'render.mp4'), os.path.join(self.opts.save_dir, RENDER_FRAMES))
-        save_pointcloud_with_normals(imgs, pcd, msk=masks, save_path=os.path.join(self.opts.save_dir, f'pcd.ply'), mask_pc=mask_pc, reduce_pc=False)
+        save_video(render_results, os.path.join(self.opts.save_dir, f'render.mp4'),
+                   os.path.join(self.opts.save_dir, RENDER_FRAMES))
+        save_pointcloud_with_normals(imgs, pcd, msk=masks, save_path=os.path.join(self.opts.save_dir, f'pcd.ply'),
+                                     mask_pc=mask_pc, reduce_pc=False)
 
         latent_masks = self.complete_mask_creation(pcd, imgs, H, W, camera_traj, num_views)
-        # print(latent_masks)
+
         with self.timer.time("diffusion"):
             diffusion_results = self.run_diffusion(render_results, latent_masks)
 
         save_video((diffusion_results + 1.0) / 2.0, os.path.join(self.opts.save_dir, f'diffusion.mp4'),
                    os.path.join(self.opts.save_dir, DIFFUSION_FRAMES))
-        torch.Size([25, 576, 1024, 3])
+
         return diffusion_results
 
     def nvs_single_view_eval(self):
