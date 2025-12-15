@@ -94,7 +94,7 @@ def create_bg_mask(base_dir):
         print(all_masks)
         all_masks = []
 
-def compute_bg_mask_last_n_frames(base_dir, current_frame=None, n_last_frames=None, H=256, W=512):
+def compute_bg_mask_last_n_frames(base_dir, current_frame=None, n_last_frames=None, H=288, W=512):
 
     easier_results = base_dir / EASI3R_RESULTS_DIR
     if current_frame is not None:
@@ -122,9 +122,10 @@ def compute_bg_mask_last_n_frames(base_dir, current_frame=None, n_last_frames=No
             else:
                 combined_mask += mask_tensor
         combined_mask = combined_mask.clamp(0, 1)
+        combined_mask = combined_mask.squeeze()
+        combined_mask = combined_mask > 0
         all_masks.append(combined_mask)
 
-        combined_mask = combined_mask[0]
         mask_np = (combined_mask.numpy() * 255.0).astype(np.uint8)
         img = Image.fromarray(mask_np, mode="L")
         img.save(base_dir / VIS_RESULTS_DIR / f"bg_mask_{str(folder.stem)}.png")

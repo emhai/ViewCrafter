@@ -6,7 +6,7 @@ import shlex
 
 from PIL import Image
 
-from configs.v2v_config import DIFFUSION_FRAMES
+from configs.v2v_config import GENERATED_FRAMES_DIR
 
 PATH_TO_4DGS = Path("/home/emmahaidacher/Desktop/4DGaussians")
 
@@ -83,12 +83,12 @@ def create_4dgs_shell(exp_name, output_file):
 
     shell_path.chmod(0o755)
 
-def setup_4dgs_from_viewcrafter(cameras_path, exp_name):
+def setup_4dgs_from_viewcrafter(base_path, exp_name):
 
     output_folder = PATH_TO_4DGS / "data" / "multipleview" / exp_name
-    output_folder.mkdir()
+    output_folder.mkdir(exist_ok=True)
 
-    diffusion_folder = cameras_path / DIFFUSION_FRAMES
+    diffusion_folder = base_path / GENERATED_FRAMES_DIR
     for folder in diffusion_folder.iterdir():
         if folder.is_dir():
             shutil.copytree(str(folder), str(output_folder / folder.name))
@@ -143,8 +143,8 @@ def rename_frames_from_number(folder):
         num = int(p.stem)
         p.rename(p.with_name(f"frame_{num:05}.jpg"))
 
-def test_4dgs_after_complete_run(cameras_dir, exp_name, ):
-     setup_4dgs_from_viewcrafter(cameras_dir, exp_name)
+def test_4dgs_after_complete_run(base_dir, exp_name):
+     setup_4dgs_from_viewcrafter(base_dir, exp_name)
 #
     # original_exp_name = "original_" + exp_name
     # setup_4dgs_from_videos(self.base_dir / ORIGINAL_VIDEOS_DIR, original_exp_name)
@@ -153,9 +153,9 @@ def test_4dgs_after_complete_run(cameras_dir, exp_name, ):
     # torch.cuda.empty_cache()  # release cached blocks to the driver
     # torch.cuda.ipc_collect()  # clean IPC memory
     # del self.diffusion  # todo, works?
-#
-    # run_4dgs(self.opts.exp_name)
-    # run_4dgs(original_exp_name)
+
+     run_4dgs(exp_name)
+     # run_4dgs(original_exp_name)
 
 def main():
     # vcpath = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/yoga/cameras/")
@@ -169,28 +169,33 @@ def main():
     # rename_frames_from_number(path)
     # setup_4dgs_from_viewcrafter(path, "multicam_w_original_vids")
     # run_4dgs("multicam_w_original_vids")
-    path_to_scripts = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/scripts")
-
-    GS_runs = ["yoga", "beef", "dance", "espresso", "corgi"]
-    numbers = ["1", "3"]
-    og = ["original_", ""]
-
-    # list comprehension
-    combinations = [prefix + run + "_" + num
-                    for prefix in og
-                    for run in GS_runs
-                    for num in numbers]
-
-    print(combinations)
-
-    for combi in combinations:
-        create_4dgs_shell(combi, path_to_scripts / f"{combi}.sh")
-
+    #path_to_scripts = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/scripts")
+#
+    #GS_runs = ["yoga", "beef", "dance", "espresso", "corgi"]
+    #numbers = ["1", "3"]
+    #og = ["original_", ""]
+#
+    ## list comprehension
+    #combinations = [prefix + run + "_" + num
+    #                for prefix in og
+    #                for run in GS_runs
+    #                for num in numbers]
+#
+    #print(combinations)
+#
+    #for combi in combinations:
+    #    create_4dgs_shell(combi, path_to_scripts / f"{combi}.sh")
+#
     # create_4dgs_shell("yoga_og_cropped", path_to_scripts / "yoga_og_cropped.sh")
     # create_4dgs_shell("yoga_vc", path_to_scripts / "yoga_vc.sh")
 
     # run_4dgs("yoga_vc")
     # run_4dgs("yoga_og")
+    path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_11_12/coffee_3x15_near_10_cfg__ddim__latent_blending")
+    # test_4dgs_after_complete_run(path, "lb_ddim_cfg1_1112")
+    # run_4dgs("lb_ddim_cfg1_1112")
+    setup_4dgs_from_videos(Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_11_12/test_for_4dgs"), "test4dgs_1112")
+    run_4dgs("test4dgs_1112")
 
 if __name__ == '__main__':
     main()

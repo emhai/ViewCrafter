@@ -305,9 +305,6 @@ class DDIMSampler(object):
         else:
             iterator = time_range
 
-        # clean_cond = kwargs.pop("clean_cond", False)
-        clean_cond = (prev_conds_z0 is not None)
-
         if msa == MSAType.MASACTRL:
             msa_tracker = MSATracker(start_step=4, start_layer=10) # from MasaCtrl
         elif msa == MSAType.PIX_2_VIDEO:
@@ -329,29 +326,27 @@ class DDIMSampler(object):
 
             ## use mask to blend noised original latent (img_orig) & new sampled latent (img)
             if mask_move is not None and mask_static is not None:
-                # references
+                assert first_conds_z0 is not None and prev_conds_z0 is not None
 
-                if first_conds_z0 is not None:
-                    if i < 0.25 * total_steps:
-                        z_first = first_conds_z0[i]
-                        w_static = 0.2
-                        img = img + mask_static * w_static * (z_first - img)
+                ms = mask_static.clamp(0, 1)
+                md = 1.0 - ms
 
-                if prev_conds_z0 is not None:
-                    z_prev = prev_conds_z0[i]
-                    if i < 0.5 * total_steps:
-                        w_move = 0.05
-                        w_static = 0.6
+                bg = first_conds_z0[i]
+                fg = prev_conds_z0[i]
 
-                        img = img + mask_move * w_move * (z_prev - img)
-                        img = img + mask_static * w_static * (z_prev - img)
+                # keep background strongly early
+                if i < 0.7 * total_steps:
+                    alpha_bg = ms  # w_static = 1
+                    img = alpha_bg * bg + (1 - alpha_bg) * img
+                    #                     w_static = 1
+                    #                     alpha_bg = w_static * ms
+                    #                     img = img + alpha_bg * (bg - img)
 
-                    else:
-                        w_static = 0.1
-                        img = img + mask_static * w_static * (z_prev - img)
-
-
-
+                # weak dynamic guidance very early
+                if i < 0.25 * total_steps:
+                    w_dynamic = 0.2
+                    alpha_dyn = w_dynamic * md
+                    img = img + alpha_dyn * (fg - img)
 
             outs = self.p_sample_ddim(img, cond, ts, index=index, use_original_steps=ddim_use_original_steps,
                                       quantize_denoised=quantize_denoised, temperature=temperature,

@@ -1,6 +1,7 @@
 import sys
 
-from local_utils.mask_utils import create_frame_diff_masks, clean_mask, rendered_mask_to_binary, binary_mask_to_latent
+from local_utils.mask_utils import create_frame_diff_masks, clean_mask, rendered_mask_to_binary, binary_mask_to_latent, \
+    compute_bg_mask_last_n_frames
 from local_utils.metric_utils import run_metrics
 
 sys.path.append('./extern/dust3r')
@@ -54,6 +55,7 @@ class ViewCrafter:
             self.msa_type = MSAType[self.opts.msa.upper()] if self.opts.msa is not None else None
             self.radius = None                  # static radius to keep trajectory same even if point clouds differ
             self.DDIM_noise = None              # starting noise for subsequent runs - DDIM inversion
+            self.bg_mask = None
 
             assert os.path.isdir(self.opts.image_dir)
 
@@ -214,10 +216,7 @@ class ViewCrafter:
 
         return torch.clamp(batch_samples[0][0].permute(1, 2, 3, 0), -1.0, 1.0)
 
-    def background_mask_creation(self):
-        pass
-
-    def complete_mask_creation(self, point_cloud, images, height, width, trajectory, no_views):
+    def complete_mask_creation(self, type, point_cloud, images, height, width, trajectory, no_views):
 
         if self.run_number == 0:
             return None
@@ -225,19 +224,25 @@ class ViewCrafter:
         # binary_masks are either: difference between current and previous frame, difference between current and first
         # frame, loaded dynamic mask from easi3r - depends on self.mask_type. masks of shape (1, 1, H /2, W/2) which
         # is the same dim as point cloud created by dust3r
-        binary_masks = self.create_binary_masks()
+
+        if type == "fg":
+            binary_masks = self.create_binary_masks()
+        else:
+            assert type == "bg"
+            binary_masks = compute_bg_mask_last_n_frames(self.base_dir, None, None, height, width)
+
         mask_save_dir = Path(self.opts.save_dir) / MASKS_DIR
         # masked_render_results are the masks + point maps from duster, rendered to the calculated camera trajectory
         masked_render_results, viewmask = self.run_render(point_cloud, images, binary_masks, height, width, trajectory, no_views)
         masked_render_results = F.interpolate(masked_render_results.permute(0, 3, 1, 2), size=(self.opts.height, self.opts.width),
                                        mode='bilinear',
                                        align_corners=False).permute(0, 2, 3, 1)
-        save_video(masked_render_results, str(mask_save_dir / 'masked_render.mp4'), str(mask_save_dir / "masked_render_results"))
-        visualize_masks_horizontal(masked_render_results, mask_save_dir / "diff_masks_all.png")
+        save_video(masked_render_results, str(mask_save_dir / f'{type}_masked_render.mp4'), str(mask_save_dir / f"{type}_masked_render_results"))
+        visualize_masks_horizontal(masked_render_results, mask_save_dir / f"{type}_diff_masks_all.png")
 
         # boolean_masks are the masked_render_results, thresholded to [0, 1]
         boolean_masks = rendered_mask_to_binary(masked_render_results)
-        visualize_masks_horizontal(boolean_masks, mask_save_dir / "bool_masks_all.png", cmap='Greys')
+        visualize_masks_horizontal(boolean_masks, mask_save_dir / f"{type}_bool_masks_all.png", cmap='Greys')
 
         cleaned = []
         for i in range(boolean_masks.shape[0]):
@@ -247,7 +252,7 @@ class ViewCrafter:
             cleaned.append(torch.from_numpy(cleaned_mask > 127))  # threshold back to bool
 
         cleaned_masks = torch.stack(cleaned, dim=0).to(self.device)
-        visualize_masks_horizontal(cleaned_masks, mask_save_dir / "cleaned_masks.png", cmap='Greys')
+        visualize_masks_horizontal(cleaned_masks, mask_save_dir / f"{type}_cleaned_masks.png", cmap='Greys')
 
         # float_cleaned_mask = cleaned_masks.float()
         # float_cleaned_mask = float_cleaned_mask * 0.9
@@ -255,7 +260,10 @@ class ViewCrafter:
 
         # latent_masks are the boolean_masks downsampled to latent shape
         latent_masks = binary_mask_to_latent(cleaned_masks, self.noise_shape)
-        visualize_masks_horizontal(latent_masks.squeeze(), mask_save_dir / "latent_masks_all.png", cmap='Greys')
+        visualize_masks_horizontal(latent_masks.squeeze(), mask_save_dir / f"{type}_latent_masks_all.png", cmap='Greys')
+
+        if type == "bg":
+            latent_masks = 1 - latent_masks
 
         return latent_masks
 
@@ -494,8 +502,12 @@ class ViewCrafter:
                                      save_path=os.path.join(self.opts.save_dir, 'pcd.ply'), mask_pc=False,
                                      reduce_pc=False)
 
-        latent_masks_move = self.complete_mask_creation([pcd[-1]], [imgs[-1]], H, W, camera_traj, num_views)
-        latent_masks_static = 1 - latent_masks_move if latent_masks_move is not None else None
+        latent_masks_move = self.complete_mask_creation("fg", [pcd[-1]], [imgs[-1]], H, W, camera_traj, num_views)
+
+        if self.bg_mask is None:
+            self.bg_mask = self.complete_mask_creation("bg", pcd, imgs, H, W, camera_traj, num_views)
+
+        latent_masks_static = self.bg_mask
 
         with self.timer.time("diffusion"):
             diffusion_results = self.run_diffusion(render_results, latent_masks_move, latent_masks_static)
@@ -665,9 +677,15 @@ class ViewCrafter:
         save_video(render_results, os.path.join(self.opts.save_dir, f'render.mp4'), os.path.join(self.opts.save_dir, RENDER_FRAMES))
         save_pointcloud_with_normals(imgs, pcd, msk=masks, save_path=os.path.join(self.opts.save_dir, f'pcd.ply'), mask_pc=mask_pc, reduce_pc=False)
 
-        latent_masks_move = self.complete_mask_creation(pcd, imgs, H, W, camera_traj, num_views)
-        # print(latent_masks)
-        latent_masks_static = 1 - latent_masks_move if latent_masks_move is not None else None
+        vis_mask_dir = Path(self.opts.save_dir) / MASKS_DIR
+        vis_mask_dir.mkdir(exist_ok=True)
+
+        latent_masks_move = self.complete_mask_creation("fg", pcd, imgs, H, W, camera_traj, num_views)
+
+        if self.bg_mask is None:
+            self.bg_mask = self.complete_mask_creation("bg", pcd, imgs, H, W, camera_traj, num_views)
+
+        latent_masks_static = self.bg_mask
         with self.timer.time("diffusion"):
             diffusion_results = self.run_diffusion(render_results, latent_masks_move, latent_masks_static)
 

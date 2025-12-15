@@ -40,10 +40,8 @@ def run_one_category_all_datasets():
             print(f"Script {modified} failed with return code {e.returncode}")
 
 
-def run_one_dataset_all_categories():
-    scripts_dir = Path( PATH_TO_REPO / "master_scripts/multiple")
-    out_dir = Path(PATH_TO_GOOD_RESULTS / "COFFEE_RESULTS_ALL")
-    dataset_path = Path(PATH_TO_DATASETS / "near_datasets/coffee_4x15_near")
+def run_one_dataset_all_categories(dataset_path, out_dir):
+    scripts_dir = Path(PATH_TO_REPO) / "master_scripts" / "multiple_short"
 
     if not out_dir.exists():
         out_dir.mkdir()
@@ -155,10 +153,10 @@ def main():
     # to_run_coffee = [4, 9, 10]
     # run_all(datasets_path, out_dir, to_run_coffee)
 
-    to_run_all = [0, 4, 9, 10]
-    datasets_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_4x15/good_datasets")
-    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_05_12")
-    run_all(datasets_path, out_dir, to_run_all, 60)
+    # to_run_all = [0, 4, 10]
+    datasets_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_3x15/datasets/coffee_3x15_near")
+    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_11_12")
+    run_one_dataset_all_categories(datasets_path, out_dir)
 
     # in_vid = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_4x15/datasets/yoga_4x15_near")
     # out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_28_11")
