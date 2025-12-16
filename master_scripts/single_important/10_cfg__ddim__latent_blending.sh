@@ -18,4 +18,9 @@ python inference.py \
 --exp_name      EXP_NAME \
 --n_frames      NUMBER_FRAMES \
 --set_position \
---reuse_guidance_image
+--reuse_guidance_image \
+--use_easi3r \
+--unconditional_guidance_scale 1.0 \
+--use_ddim_inversion \
+--use_latent_blending \
+--mask_type easi3r_prev

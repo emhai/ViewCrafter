@@ -333,18 +333,17 @@ class DDIMSampler(object):
 
                 bg = first_conds_z0[i]
                 fg = prev_conds_z0[i]
+                mix = (bg + fg) / 2
 
-                # keep background strongly early
-                if i < 0.7 * total_steps:
-                    alpha_bg = ms  # w_static = 1
-                    img = alpha_bg * bg + (1 - alpha_bg) * img
-                    #                     w_static = 1
-                    #                     alpha_bg = w_static * ms
-                    #                     img = img + alpha_bg * (bg - img)
+                # background guidance
+                if i < 0.75 * total_steps:
+                    w_static = 0.9
+                    alpha_bg = w_static * ms
+                    img = img + alpha_bg * (mix - img)
 
-                # weak dynamic guidance very early
+                # dynamic guidance
                 if i < 0.25 * total_steps:
-                    w_dynamic = 0.2
+                    w_dynamic = 0.3
                     alpha_dyn = w_dynamic * md
                     img = img + alpha_dyn * (fg - img)
 

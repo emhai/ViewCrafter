@@ -1,15 +1,16 @@
 python inference.py \
 --image_dir     IMAGE_DIR \
 --gt_dir        GT_DIR \
+--traj_txt      TRAJ_DIR \
 --out_dir       OUT_DIR \
---mode          multi_video_interp \
+--mode          single_video_interp \
 --bg_trd        0.2 \
 --seed          123 \
 --ckpt_path     ./checkpoints/model_16.ckpt \
 --config        configs/inference_pvd_1024.yaml \
 --ddim_steps    50 \
---ddim_eta      0.0 \
---temperature   0.0 \
+--ddim_eta      1.0 \
+--temperature   1.0 \
 --video_length  16 \
 --device        cuda:0 \
 --height        576 \
@@ -19,6 +20,5 @@ python inference.py \
 --n_frames      NUMBER_FRAMES \
 --set_position \
 --reuse_guidance_image \
---msa masactrl \
---use_ddim_inversion \
---unconditional_guidance_scale 1.0
+--use_easi3r \
+--use_ddim_inversion

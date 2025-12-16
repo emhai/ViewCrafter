@@ -4,20 +4,16 @@ from pathlib import Path
 
 from configs.v2v_config import *
 
-def run_one_category_all_datasets():
-    script = Path(PATH_TO_REPO / "master_scripts/multiple/9_cfg__ddim__latent_blending.sh")
-    out_dir = Path(PATH_TO_GOOD_RESULTS / "9_ALL_RESULTS")
-    dataset_path = Path(PATH_TO_DATASETS / "near_datasets")
+def run_one_category_all_datasets(script, dataset_path, out_dir, no_frames):
 
     if not out_dir.exists():
         out_dir.mkdir()
 
-    img_dir = dataset_path / "input"
-    gt_dir = dataset_path / "gt"
-    no_frames = 60
     for dataset in dataset_path.iterdir():
-        script_name = script.name.split(".")[0]
-        exp_name = dataset.name + "_" + script_name
+        img_dir = dataset / "input"
+        gt_dir = dataset / "gt"
+        exp_name = f"{script.stem}_{dataset.name}"
+
         text = script.read_text()
 
         replacements = {
@@ -50,8 +46,7 @@ def run_one_dataset_all_categories(dataset_path, out_dir):
     gt_dir = dataset_path / "gt"
     no_frames = 60
     for script in scripts_dir.iterdir():
-        script_name = script.name.split(".")[0]
-        exp_name = dataset_path.name + "_" + script_name
+        exp_name = f"{script.stem}_{dataset_path.name}"
         text = script.read_text()
 
         replacements = {
@@ -153,10 +148,13 @@ def main():
     # to_run_coffee = [4, 9, 10]
     # run_all(datasets_path, out_dir, to_run_coffee)
 
-    # to_run_all = [0, 4, 10]
-    datasets_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_3x15/datasets/coffee_3x15_near")
-    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_11_12")
-    run_one_dataset_all_categories(datasets_path, out_dir)
+    dataset_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_4x15/good_datasets")
+    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_15_12")
+
+    script = Path(PATH_TO_REPO) / "master_scripts" / "multiple"/ "10_cfg__ddim__latent_blending.sh"
+    run_one_category_all_datasets(script, dataset_path, out_dir, 60)
+    script = Path(PATH_TO_REPO) / "master_scripts" / "multiple"/ "9_cfg__ddim__latent_blending.sh"
+    run_one_category_all_datasets(script, dataset_path, out_dir, 60)
 
     # in_vid = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_4x15/datasets/yoga_4x15_near")
     # out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_28_11")

@@ -1,8 +1,9 @@
 python inference.py \
 --image_dir     IMAGE_DIR \
 --gt_dir        GT_DIR \
+--traj_txt      TRAJ_DIR \
 --out_dir       OUT_DIR \
---mode          single_view_txt \
+--mode          single_video_interp \
 --bg_trd        0.2 \
 --seed          123 \
 --ckpt_path     ./checkpoints/model_16.ckpt \
@@ -16,4 +17,7 @@ python inference.py \
 --width         1024 \
 --model_path    ./checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth \
 --exp_name      EXP_NAME \
---n_frames      NUMBER_FRAMES
+--n_frames      NUMBER_FRAMES \
+--set_position \
+--reuse_guidance_image \
+--use_easi3r

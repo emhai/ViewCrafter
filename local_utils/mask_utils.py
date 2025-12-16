@@ -55,11 +55,11 @@ def create_frame_diff_masks(current_imgs, prev_imgs, threshold=0.1, output_dir=N
 
 def clean_mask(input_mask):
 
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (20, 20))
 
     closing = cv2.morphologyEx(input_mask, cv2.MORPH_CLOSE, kernel)
-    dilation = cv2.dilate(closing, kernel, iterations=1)
-    filled = cv2.medianBlur(dilation, 7)
+    dilation = cv2.dilate(closing, kernel, iterations=2)
+    filled = cv2.medianBlur(dilation, 9)
 
     return filled
 
