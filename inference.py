@@ -1,4 +1,5 @@
 import csv
+import shutil
 from pathlib import Path
 
 from configs.v2v_config import ARGS_FILE, RESULTS_CSV_FILE
@@ -52,6 +53,7 @@ if __name__=="__main__":
 
         elif opts.mode == 'single_video_interp':
             pvd.run_video_interp("single")
+            shutil.copyfile(opts.traj_txt, os.path.join(opts.save_dir, 'traj.txt'))
 
         else:
             raise KeyError(f"Invalid Mode: {opts.mode}")

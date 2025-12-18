@@ -3,6 +3,7 @@ import sys
 from local_utils.mask_utils import create_frame_diff_masks, clean_mask, rendered_mask_to_binary, binary_mask_to_latent, \
     compute_bg_mask_last_n_frames
 from local_utils.metric_utils import run_metrics
+from local_utils.upsample_utils import upsample_folder
 
 sys.path.append('./extern/dust3r')
 sys.path.append('./extern/mast3r')
@@ -63,6 +64,7 @@ class ViewCrafter:
             setup_structure(self.base_dir, Path(self.opts.image_dir), Path(self.opts.gt_dir))
 
             with self.timer.time("easi3r"):
+                print(f"runnign easier with {self.opts.n_frames}")
                 run_easi3r_from_viewcrafter(self.base_dir, self.opts.n_frames) # stores masks and pickles to folders
 
         if self.opts.use_mast3r:
@@ -404,8 +406,10 @@ class ViewCrafter:
         # 最后一个view为 0 pose
         # todo cleanup
         pickle_dir = Path(self.base_dir) / PICKLES_DIR
-        pickle_file = list(pickle_dir.rglob("*.pkl"))[0]
-        if self.opts.use_easi3r and any(pickle_dir.iterdir()):
+        pickle_file = list(pickle_dir.rglob("*.pkl"))
+
+        if self.opts.use_easi3r and len(pickle_file) == 1:
+            pickle_file = pickle_file[0]
             print("Using Easi3r for PC")
 
             pickle_imgs, c2ws, principal_points, focals, pickle_pts3d, pickle_depths = self.get_pickle_vals(pickle_file)
@@ -866,6 +870,8 @@ class ViewCrafter:
         if self.opts.gt_dir is not None:
             with self.timer.time("metrics"):
                 run_metrics(self.base_dir)
+
+        upsample_folder(self.base_dir / GENERATED_FRAMES_DIR, 2)
 
 
     def setup_diffusion(self):

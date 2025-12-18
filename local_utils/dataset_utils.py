@@ -1,3 +1,4 @@
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -167,14 +168,10 @@ def create_traj_file(name, i,  path):
 
     index = single_names.index(name)
 
-    move_script = Path(PATH_TO_REPO) / "master_scripts" / "move.txt"
-    text = move_script.read_text()
     traj_amount = str(single_trajs[index][i])
-    text = text.replace("amount", traj_amount)
-
+    text = f"0 {traj_amount}\n0 0\n0 0"
     modified = path / f"traj.txt"
     modified.write_text(text)
-
 
 def single_input_single_gt(modified_path, new_path):
 
@@ -266,12 +263,16 @@ def run(output_path, setup_duration, input_type="multiple"):
         single_input_single_gt(modified_dataset_path, finished_dataset_path)
 
 def main():
-    setup_duration = [2, 10]
+
+    for i in Path("/media/emmahaidacher/Volume/GOOD_RESULTS/salmon_4dgs_ups").iterdir():
+        temp_name = i.stem.split("_")[-1]
+        os.rename(i, str(i.parent / f"temp_{temp_name}"))
+    setup_duration = [3, 15]
     output_path = Path("/media/emmahaidacher/Volume/DATASETS")
     #run(output_path, setup_duration, "single")
 
-    single_input_single_gt(Path("/media/emmahaidacher/Volume/DATASETS/datasets_4x15_single/modified_datasets"),
-                           Path("/media/emmahaidacher/Volume/DATASETS/datasets_4x15_single/datasets"))
+    #single_input_single_gt(Path("/media/emmahaidacher/Volume/DATASETS/datasets_4x15_single/modified_datasets"),
+                    #       Path("/media/emmahaidacher/Volume/DATASETS/datasets_4x15_single/datasets"))
 
 if __name__ == "__main__":
     main()

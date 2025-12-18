@@ -284,7 +284,17 @@ def main():
     # vid_path_in = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_26_11/10_cfg__ddim__latent_blending_salmon_3x15_near/generated_videos")
     # vid_path_out = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_26_11/10_cfg__ddim__latent_blending_salmon_3x15_near/vis_results")
     # ffmpeg_4x4_video(vid_path_in, vid_path_out)
-    separate_cameras(Path("/media/emmahaidacher/Volume/GOOD_RESULTS/20251216_1646_coffee"), DIFFUSION_FRAMES)
+    # separate_cameras(Path("/media/emmahaidacher/Volume/GOOD_RESULTS/20251216_1646_coffee"), DIFFUSION_FRAMES)
+
+    for folder in Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_16_12").iterdir():
+        if len(list((folder / "rendered_videos").iterdir())) > 0:
+            gt_video = list((folder / "gt_videos").rglob("*.mp4"))[0]
+
+            ffmpeg_overlay_5050(gt_video, folder / "rendered_videos" / "cam16.mp4", folder / "r_overlay.mp4")
+            ffmpeg_overlay_5050(gt_video, folder / "generated_videos" / "cam16.mp4", folder / "g_overlay.mp4")
+            ffmpeg_side_by_side_vid(gt_video, folder / "rendered_videos" / "cam16.mp4", folder / "r_sbs.mp4")
+            ffmpeg_side_by_side_vid(gt_video, folder / "generated_videos" / "cam16.mp4", folder / "g_sbs.mp4")
+
 
 
 

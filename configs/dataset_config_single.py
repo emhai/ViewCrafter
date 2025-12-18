@@ -21,15 +21,14 @@ single_video_names = [["cam05.mp4", "cam00.mp4", "cam06.mp4"],     # coffee
                       ["cam00.mp4", "cam06.mp4", "cam08.mp4"],     # steak
                       ["cam05.mp4", "cam00.mp4", "cam06.mp4"],     # salmon
                       ["0005.mp4", "0010.mp4"],                    # yoga
-                      ["camera_0001.mp4", "camera_0006.mp4"],      # goats
+                      ["camera_0001.mp4", "camera_0003.mp4"],      # goats
                       ["camera_0001.mp4", "camera_0006.mp4"],      # welder
                       ["camera_0006.mp4", "camera_0001.mp4"],      # flames
                       ["camera_0006.mp4", "camera_0001.mp4"],      # car
                       ["4.mp4", "3.mp4"]                           # harp
                       ]
 
-#               -coffee-    -spinach-   -steak-   -salmon-   -yoga--   -goats-   -welder-   -flames-   -car--   -harp--
-#               -right--    -right---   -right-   -right--   -right-   -left--   -left---   -right--   -left-   -right-
-single_trajs = [[6, 12],    [3, 6],     [4, 8],   [-4, -8],  [5],      [-3],     [-4],      [6],       [-5],    [5]]
+#               -coffee-    -spinach-   -steak-     -salmon-    -yoga-  -goats- -welder-    -flames-    -car-   -harp-
+single_trajs = [[-8, -14],  [8, 14],    [-8, -14],  [-8, -14],  [-9],   [-6],   [6],        [-6],       [-7],   [9]]
 
 single_distances = ["near", "middle", "far", "v_far", "vv_far"]

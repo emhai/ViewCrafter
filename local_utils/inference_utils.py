@@ -26,6 +26,9 @@ def run_one_category_all_datasets(script, dataset_path, out_dir, no_frames):
         for old, new in replacements.items():
             text = text.replace(old, new)
 
+        if "TRAJ_DIR" in text:
+            text = text.replace("TRAJ_DIR", str(dataset / "traj.txt"))
+
         modified = script.parent / f"temp_{script.name}"
         new_text = f"cd {PATH_TO_REPO}\n" + text
         modified.write_text(new_text)
@@ -148,13 +151,12 @@ def main():
     # to_run_coffee = [4, 9, 10]
     # run_all(datasets_path, out_dir, to_run_coffee)
 
-    dataset_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_4x15/good_datasets")
-    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_15_12")
+    dataset_path = Path("/media/emmahaidacher/Volume/DATASETS/datasets_3x15_single/datasets")
+    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_19_12")
 
-    script = Path(PATH_TO_REPO) / "master_scripts" / "multiple"/ "10_cfg__ddim__latent_blending.sh"
-    run_one_category_all_datasets(script, dataset_path, out_dir, 60)
-    script = Path(PATH_TO_REPO) / "master_scripts" / "multiple"/ "9_cfg__ddim__latent_blending.sh"
-    run_one_category_all_datasets(script, dataset_path, out_dir, 60)
+    # for script in (Path(PATH_TO_REPO) / "master_scripts" / "single_important").iterdir():
+    script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/single_important/10_cfg__ddim__latent_blending.sh")
+    run_one_category_all_datasets(script, dataset_path, out_dir, 45)
 
     # in_vid = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_4x15/datasets/yoga_4x15_near")
     # out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_28_11")
