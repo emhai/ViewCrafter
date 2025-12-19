@@ -264,12 +264,12 @@ def run(output_path, setup_duration, input_type="multiple"):
 
 def main():
 
-    for i in Path("/media/emmahaidacher/Volume/GOOD_RESULTS/salmon_4dgs_ups").iterdir():
-        temp_name = i.stem.split("_")[-1]
-        os.rename(i, str(i.parent / f"temp_{temp_name}"))
+    # for i in Path("/media/emmahaidacher/Volume/GOOD_RESULTS/salmon_4dgs_ups").iterdir():
+    #     temp_name = i.stem.split("_")[-1]
+    #     os.rename(i, str(i.parent / f"temp_{temp_name}"))
     setup_duration = [3, 15]
     output_path = Path("/media/emmahaidacher/Volume/DATASETS")
-    #run(output_path, setup_duration, "single")
+    run(output_path, setup_duration, "single")
 
     #single_input_single_gt(Path("/media/emmahaidacher/Volume/DATASETS/datasets_4x15_single/modified_datasets"),
                     #       Path("/media/emmahaidacher/Volume/DATASETS/datasets_4x15_single/datasets"))

@@ -158,6 +158,8 @@ def main():
     script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/single_important/10_cfg__ddim__latent_blending.sh")
     run_one_category_all_datasets(script, dataset_path, out_dir, 45)
 
+    script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/single_important/8_cfg__ddim.sh")
+    run_one_category_all_datasets(script, dataset_path, out_dir, 45)
     # in_vid = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_4x15/datasets/yoga_4x15_near")
     # out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_28_11")
     # script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple/10_cfg__ddim__latent_blending.sh")

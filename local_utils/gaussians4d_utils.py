@@ -83,13 +83,12 @@ def create_4dgs_shell(exp_name, output_file):
 
     shell_path.chmod(0o755)
 
-def setup_4dgs_from_viewcrafter(base_path, exp_name):
+def setup_4dgs_from_viewcrafter(frames_dir, exp_name):
 
     output_folder = PATH_TO_4DGS / "data" / "multipleview" / exp_name
     output_folder.mkdir(exist_ok=True)
 
-    diffusion_folder = base_path / GENERATED_FRAMES_DIR
-    for folder in diffusion_folder.iterdir():
+    for folder in frames_dir.iterdir():
         if folder.is_dir():
             shutil.copytree(str(folder), str(output_folder / folder.name))
 

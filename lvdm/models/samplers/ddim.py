@@ -337,15 +337,15 @@ class DDIMSampler(object):
 
                 # background guidance
                 if i < 0.75 * total_steps:
-                    w_static = 0.9
+                    w_static = 1
                     alpha_bg = w_static * ms
                     img = img + alpha_bg * (mix - img)
 
                 # dynamic guidance
-                if i < 0.25 * total_steps:
-                    w_dynamic = 0.3
-                    alpha_dyn = w_dynamic * md
-                    img = img + alpha_dyn * (fg - img)
+                # if i < 0.25 * total_steps:
+                #     w_dynamic = 0.3
+                #     alpha_dyn = w_dynamic * md
+                #     img = img + alpha_dyn * (fg - img)
 
             outs = self.p_sample_ddim(img, cond, ts, index=index, use_original_steps=ddim_use_original_steps,
                                       quantize_denoised=quantize_denoised, temperature=temperature,

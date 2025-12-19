@@ -3,7 +3,7 @@ import sys
 from local_utils.mask_utils import create_frame_diff_masks, clean_mask, rendered_mask_to_binary, binary_mask_to_latent, \
     compute_bg_mask_last_n_frames
 from local_utils.metric_utils import run_metrics
-from local_utils.upsample_utils import upsample_folder
+from local_utils.upsample_utils import upsample_folder_realesrgan, upsample_folder_cv2
 
 sys.path.append('./extern/dust3r')
 sys.path.append('./extern/mast3r')
@@ -857,6 +857,7 @@ class ViewCrafter:
                                                                             remaining_time, remaining_time / 60))
             self.run_number += 1
 
+        # todo should all of this v be outside viiewcrafteR?
         separate_cameras(self.base_dir, DIFFUSION_FRAMES)
         separate_cameras(self.base_dir, RENDER_FRAMES)
 
@@ -871,7 +872,15 @@ class ViewCrafter:
             with self.timer.time("metrics"):
                 run_metrics(self.base_dir)
 
-        upsample_folder(self.base_dir / GENERATED_FRAMES_DIR, 2)
+        upsample_folder_realesrgan(self.base_dir / GENERATED_FRAMES_DIR, 2)
+        upsample_folder_cv2(self.base_dir / GENERATED_FRAMES_DIR, 2, "cubic")
+        upsample_folder_cv2(self.base_dir / GENERATED_FRAMES_DIR, 2, "lanczos")
+        upsample_folder_cv2(self.base_dir / GENERATED_FRAMES_DIR, 2, "linear")
+
+        # todo choooose upsampling method and run 4dgs
+        exp_name = f"{self.opts.exp_name}_lanczos"
+        setup_4dgs_from_viewcrafter(self.base_dir / f"{GENERATED_FRAMES_DIR}_upsampled_lanczos", exp_name)
+        run_4dgs(exp_name)
 
 
     def setup_diffusion(self):
