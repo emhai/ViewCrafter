@@ -2,8 +2,12 @@ import csv
 import shutil
 from pathlib import Path
 
-from configs.v2v_config import ARGS_FILE, RESULTS_CSV_FILE
+from configs.v2v_config import *
+from local_utils.gaussians4d_utils import setup_4dgs_from_viewcrafter, run_4dgs
+from local_utils.metric_utils import run_metrics
 from local_utils.timer_utils import RunTimer
+from local_utils.upsample_utils import upsample_folder_realesrgan, upsample_folder_cv2
+from local_utils.v2v_utils import separate_cameras, ffmpeg_nxn_video
 from viewcrafter import ViewCrafter
 import os
 from configs.infer_config import get_parser
@@ -58,33 +62,33 @@ if __name__=="__main__":
         else:
             raise KeyError(f"Invalid Mode: {opts.mode}")
 
-    timings_file = timer.init_timings_file(pvd.base_dir)
-    times = timer.as_dict()
+    print("Deleting ViewCrafter object")
+    base_dir = pvd.base_dir
+    del pvd
 
-    t_dust3r = times.get("dust3r", 0.0)
-    t_easi3r = times.get("easi3r", 0.0)
-    t_ddim = times.get("ddim", 0.0)
-    t_total = times.get("total", 0.0)
-    t_metrics = times.get("metrics", 0.0)
-    t_visualize = times.get("visualize", 0.0)
-    t_diffusion = times.get("diffusion", 0.0)
+    print("Cleaning GPU up")
+    torch.cuda.synchronize()  # finish kernels
+    torch.cuda.empty_cache()  # release cached blocks to the driver
+    torch.cuda.ipc_collect()  # clean IPC memory
 
-    t_total = t_total - t_visualize # todo remove all visualizations?
-    t_diffusion = t_diffusion - t_visualize
+    separate_cameras(base_dir, DIFFUSION_FRAMES)
+    separate_cameras(base_dir, RENDER_FRAMES)
 
-    t_misc = t_total - (t_diffusion + t_easi3r + t_ddim + t_dust3r + t_metrics)
+    if opts.gt_dir is not None:
+        with timer.time("metrics"):
+            run_metrics(base_dir)
 
-    with timings_file.open("a", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow([
-            opts.exp_name,
-            opts.n_frames,
-            f"{t_total:.3f}",
-            f"{t_easi3r:.3f}",
-            f"{t_ddim:.3f}",
-            f"{t_dust3r:.3f}",
-            f"{t_diffusion:.3f}",
-            f"{t_metrics:.3f}",
-            f"{t_misc:.3f}",
-        ])
+    ffmpeg_nxn_video(base_dir / GENERATED_VIDEOS_DIR, base_dir / VIS_RESULTS_DIR)
 
+    upsample_folder_realesrgan(base_dir / GENERATED_FRAMES_DIR, 2)
+    upsample_folder_cv2(base_dir / GENERATED_FRAMES_DIR, 2, "cubic")
+    upsample_folder_cv2(base_dir / GENERATED_FRAMES_DIR, 2, "lanczos")
+    upsample_folder_cv2(base_dir / GENERATED_FRAMES_DIR, 2, "linear")
+
+    exp_name = f"{opts.exp_name}_lanczos"
+    setup_4dgs_from_viewcrafter(base_dir / f"{GENERATED_FRAMES_DIR}_upsampled_lanczos", exp_name)
+    run_4dgs(exp_name)
+
+    # todo, time everything? 4dgs, visualize
+    # Create timings file
+    timer.finish_timings(base_dir, opts.exp_name, opts.n_frames)

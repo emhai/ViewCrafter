@@ -151,15 +151,24 @@ def main():
     # to_run_coffee = [4, 9, 10]
     # run_all(datasets_path, out_dir, to_run_coffee)
 
-    dataset_path = Path("/media/emmahaidacher/Volume/DATASETS/datasets_3x15_single/datasets")
-    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_19_12")
 
-    # for script in (Path(PATH_TO_REPO) / "master_scripts" / "single_important").iterdir():
+
+    dataset_path = Path("/media/emmahaidacher/Volume/DATASETS/datasets_4x15/datasets")
+    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_19_12_mult")
+
+    script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple_important/10_cfg__ddim__latent_blending.sh")
+    run_one_category_all_datasets(script, dataset_path, out_dir, 60)
+    script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple_important/8_cfg__ddim.sh")
+    run_one_category_all_datasets(script, dataset_path, out_dir, 60)
+
+    dataset_path = Path("/media/emmahaidacher/Volume/DATASETS/datasets_3x15_single/datasets")
+    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_19_12_single")
+
     script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/single_important/10_cfg__ddim__latent_blending.sh")
     run_one_category_all_datasets(script, dataset_path, out_dir, 45)
-
     script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/single_important/8_cfg__ddim.sh")
     run_one_category_all_datasets(script, dataset_path, out_dir, 45)
+
     # in_vid = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_4x15/datasets/yoga_4x15_near")
     # out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_28_11")
     # script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple/10_cfg__ddim__latent_blending.sh")

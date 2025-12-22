@@ -16,19 +16,19 @@ single_crops = ["bottom", "bottom", "bottom", "bottom",  "bottom", "center", "ce
 
 single_ss = [2, 5, 1, 11, 15, 0, 10, 4, 2, 15] # starting second
 
-single_video_names = [["cam05.mp4", "cam00.mp4", "cam06.mp4"],     # coffee
-                      ["cam00.mp4", "cam05.mp4", "cam04.mp4"],     # spinach
-                      ["cam00.mp4", "cam06.mp4", "cam08.mp4"],     # steak
-                      ["cam05.mp4", "cam00.mp4", "cam06.mp4"],     # salmon
-                      ["0005.mp4", "0006.mp4"],                    # yoga
-                      ["camera_0001.mp4", "camera_0003.mp4"],      # goats
-                      ["camera_0001.mp4", "camera_0006.mp4"],      # welder
-                      ["camera_0006.mp4", "camera_0001.mp4"],      # flames
-                      ["camera_0006.mp4", "camera_0001.mp4"],      # car
-                      ["4.mp4", "3.mp4"]                           # harp
+single_video_names = [["cam05.mp4", "cam00.mp4"],                   # coffee
+                      ["cam00.mp4", "cam05.mp4"],                   # spinach
+                      ["cam00.mp4", "cam06.mp4"],                   # steak
+                      ["cam05.mp4", "cam00.mp4"],                   # salmon
+                      ["0005.mp4", "0006.mp4"],                     # yoga
+                      ["camera_0001.mp4", "camera_0003.mp4"],       # goats
+                      ["camera_0001.mp4", "camera_0006.mp4"],       # welder
+                      ["camera_0006.mp4", "camera_0001.mp4"],       # flames
+                      ["camera_0006.mp4", "camera_0001.mp4"],       # car
+                      ["4.mp4", "3.mp4"]                            # harp
                       ]
 
 #               -coffee-    -spinach-   -steak-     -salmon-    -yoga-  -goats- -welder-    -flames-    -car-   -harp-
-single_trajs = [[-6, -10],  [6, 10],    [-6, -10],  [-6, -10],  [8],     [-6],   [6],        [-6],       [-7],   [9]]
+single_trajs = [[-5],       [6],        [-6],       [-6],       [-8],   [-4],   [4],        [-4],       [-6],   [4]]
 
 single_distances = ["near", "middle", "far", "v_far", "vv_far"]

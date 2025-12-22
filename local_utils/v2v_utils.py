@@ -43,7 +43,7 @@ def ffmpeg_overlay_5050(vid1, vid2, output_vid):
     ]
     subprocess.run(ffmpeg_command)
 
-def ffmpeg_4x4_video(input_folder, output_folder):
+def ffmpeg_nxn_video(input_folder, output_folder):
 
     video_files = sorted([
         p for p in input_folder.iterdir()

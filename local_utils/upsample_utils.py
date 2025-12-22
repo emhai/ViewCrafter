@@ -4,11 +4,12 @@ from pathlib import Path
 
 import cv2
 
+sys.path.append('./extern/Real-ESRGAN')
 
 import os
-from realesrgan import RealESRGANer
 from basicsr.utils.download_util import load_file_from_url
 from basicsr.archs.rrdbnet_arch import RRDBNet
+from realesrgan import RealESRGANer
 
 INTERPOLATIONS_CV2 = {
     "nearest": cv2.INTER_NEAREST,
@@ -28,7 +29,7 @@ def upsample_folder_cv2(in_folder, scale=2, mode="cubic"):
         paths = sorted(list(folder.rglob('*')))
         new_folder = out_folder / folder.name
         new_folder.mkdir(exist_ok=True)
-        print('Testing', str(folder))
+        print('Upsampling', str(folder))
 
         for idx, path in enumerate(paths):
             img = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
@@ -80,7 +81,7 @@ def upsample_folder_realesrgan(in_folder, scale=2, tile=0, tile_pad=10, pre_pad=
         new_folder = out_folder / folder.name
         new_folder.mkdir(exist_ok=True)
 
-        print('Testing', str(folder))
+        print('Upsampling', str(folder))
         for idx, path in enumerate(paths):
             img = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
             output, _ = upsampler.enhance(img, outscale=netscale)

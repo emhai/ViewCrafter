@@ -182,7 +182,11 @@ def single_input_single_gt(modified_path, new_path):
         for j in range(1, amount_vids):
             input = dataset_videos[0]
             gt = dataset_videos[j]
-            new_folder = new_path / f"{dataset.name}_{single_distances[j - 1]}"
+            if amount_vids == 2:
+                distance_string = ""
+            else:
+                distance_string = "_" + single_distances[j - 1]
+            new_folder = new_path / f"{dataset.name}{distance_string}"
             new_folder.mkdir(exist_ok=True)
 
             gt_path = new_folder / "gt"

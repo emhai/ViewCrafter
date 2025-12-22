@@ -857,32 +857,6 @@ class ViewCrafter:
                                                                             remaining_time, remaining_time / 60))
             self.run_number += 1
 
-        # todo should all of this v be outside viiewcrafteR?
-        separate_cameras(self.base_dir, DIFFUSION_FRAMES)
-        separate_cameras(self.base_dir, RENDER_FRAMES)
-
-        print("Cleaning GPU up")
-        torch.cuda.synchronize()  # finish kernels
-        torch.cuda.empty_cache()  # release cached blocks to the driver
-        torch.cuda.ipc_collect()  # clean IPC memory
-        del self.diffusion
-
-        ffmpeg_4x4_video(self.base_dir / GENERATED_VIDEOS_DIR, self.base_dir / VIS_RESULTS_DIR)
-        if self.opts.gt_dir is not None:
-            with self.timer.time("metrics"):
-                run_metrics(self.base_dir)
-
-        upsample_folder_realesrgan(self.base_dir / GENERATED_FRAMES_DIR, 2)
-        upsample_folder_cv2(self.base_dir / GENERATED_FRAMES_DIR, 2, "cubic")
-        upsample_folder_cv2(self.base_dir / GENERATED_FRAMES_DIR, 2, "lanczos")
-        upsample_folder_cv2(self.base_dir / GENERATED_FRAMES_DIR, 2, "linear")
-
-        # todo choooose upsampling method and run 4dgs
-        exp_name = f"{self.opts.exp_name}_lanczos"
-        setup_4dgs_from_viewcrafter(self.base_dir / f"{GENERATED_FRAMES_DIR}_upsampled_lanczos", exp_name)
-        run_4dgs(exp_name)
-
-
     def setup_diffusion(self):
         seed_everything(self.opts.seed)
 

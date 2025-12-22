@@ -41,8 +41,28 @@ class RunTimer:
                         "t_dust3r",
                         "t_diffusion",
                         "t_metrics",
-                        "t_misc"
+                        "t_visualize"
                     ]
                 )
 
         return timings_file
+
+
+    def finish_timings(self, base_dir, exp_name, n_frames):
+
+        timings_file = self.init_timings_file(base_dir)
+        times = self.as_dict()
+
+        with timings_file.open("a", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                exp_name,
+                n_frames,
+                f"{times.get('total', 0.0):.3f}",
+                f"{times.get('easi3r', 0.0):.3f}",
+                f"{times.get('ddim', 0.0):.3f}",
+                f"{times.get('dust3r', 0.0):.3f}",
+                f"{times.get('diffusion', 0.0):.3f}",
+                f"{times.get('metrics', 0.0):.3f}",
+                f"{times.get('visualize', 0.0):.3f}",
+            ])
