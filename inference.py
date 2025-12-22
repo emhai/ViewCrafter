@@ -3,7 +3,7 @@ import shutil
 from pathlib import Path
 
 from configs.v2v_config import *
-from local_utils.gaussians4d_utils import setup_4dgs_from_viewcrafter, run_4dgs
+from local_utils.gaussians4d_utils import setup_4dgs_from_viewcrafter, run_4dgs, PATH_TO_4DGS
 from local_utils.metric_utils import run_metrics
 from local_utils.timer_utils import RunTimer
 from local_utils.upsample_utils import upsample_folder_realesrgan, upsample_folder_cv2
@@ -78,16 +78,24 @@ if __name__=="__main__":
         with timer.time("metrics"):
             run_metrics(base_dir)
 
-    ffmpeg_nxn_video(base_dir / GENERATED_VIDEOS_DIR, base_dir / VIS_RESULTS_DIR)
+    with timer.time("visualize"):
+        ffmpeg_nxn_video(base_dir / GENERATED_VIDEOS_DIR, base_dir / VIS_RESULTS_DIR)
 
-    upsample_folder_realesrgan(base_dir / GENERATED_FRAMES_DIR, 2)
-    upsample_folder_cv2(base_dir / GENERATED_FRAMES_DIR, 2, "cubic")
-    upsample_folder_cv2(base_dir / GENERATED_FRAMES_DIR, 2, "lanczos")
-    upsample_folder_cv2(base_dir / GENERATED_FRAMES_DIR, 2, "linear")
+    with timer.time("upsample"):
+        upsample_folder_realesrgan(base_dir / GENERATED_FRAMES_DIR, 2)
+        upsample_folder_cv2(base_dir / GENERATED_FRAMES_DIR, 2, "cubic")
+        upsample_folder_cv2(base_dir / GENERATED_FRAMES_DIR, 2, "lanczos")
+        upsample_folder_cv2(base_dir / GENERATED_FRAMES_DIR, 2, "linear")
 
-    exp_name = f"{opts.exp_name}_lanczos"
-    setup_4dgs_from_viewcrafter(base_dir / f"{GENERATED_FRAMES_DIR}_upsampled_lanczos", exp_name)
-    run_4dgs(exp_name)
+    with timer.time("4dgs"):
+        exp_name = f"{opts.exp_name}_lanczos"
+        setup_4dgs_from_viewcrafter(base_dir / f"{GENERATED_FRAMES_DIR}_upsampled_lanczos", exp_name)
+        run_4dgs(exp_name)
+        # /home/emmahaidacher/Desktop/4DGaussians/output/multipleview/yoga_mul_lanczos/video/ours_14000/video_rgb.mp4
+        path_to_4dgs_video = PATH_TO_4DGS / "output" / "multipleview" / exp_name / "video" / "ours_14000" / "video_rgb.mp4"
+        if path_to_4dgs_video.exists():
+            shutil.copyfile(path_to_4dgs_video, base_dir / VIS_RESULTS_DIR / "4dgs_render_result.mp4")
+
 
     # todo, time everything? 4dgs, visualize
     # Create timings file

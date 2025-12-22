@@ -41,7 +41,9 @@ class RunTimer:
                         "t_dust3r",
                         "t_diffusion",
                         "t_metrics",
-                        "t_visualize"
+                        "t_visualize",
+                        "t_4dgs",
+                        "t_upsample",
                     ]
                 )
 
@@ -65,4 +67,6 @@ class RunTimer:
                 f"{times.get('diffusion', 0.0):.3f}",
                 f"{times.get('metrics', 0.0):.3f}",
                 f"{times.get('visualize', 0.0):.3f}",
+                f"{times.get('4dgs', 0.0):.3f}",
+                f"{times.get('upsample', 0.0):.3f}",
             ])

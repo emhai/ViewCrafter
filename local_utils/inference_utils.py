@@ -154,30 +154,23 @@ def main():
 
 
     dataset_path = Path("/media/emmahaidacher/Volume/DATASETS/datasets_4x15/datasets")
-    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_19_12_mult")
+    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_22_12_mult")
 
     script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple_important/10_cfg__ddim__latent_blending.sh")
     run_one_category_all_datasets(script, dataset_path, out_dir, 60)
     script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple_important/8_cfg__ddim.sh")
     run_one_category_all_datasets(script, dataset_path, out_dir, 60)
 
-    dataset_path = Path("/media/emmahaidacher/Volume/DATASETS/datasets_3x15_single/datasets")
-    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_19_12_single")
+    dataset_path = Path("/media/emmahaidacher/Volume/DATASETS/datasets_3x15_single/datasets/yoga_3x15")
+    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_22_12_single")
 
     script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/single_important/10_cfg__ddim__latent_blending.sh")
-    run_one_category_all_datasets(script, dataset_path, out_dir, 45)
+    run_one(script, dataset_path, out_dir, 45)
     script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/single_important/8_cfg__ddim.sh")
-    run_one_category_all_datasets(script, dataset_path, out_dir, 45)
+    run_one(script, dataset_path, out_dir, 45)
+    script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/single_important/0_vanilla.sh")
+    run_one(script, dataset_path, out_dir, 45)
 
-    # in_vid = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS_4x15/datasets/yoga_4x15_near")
-    # out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_28_11")
-    # script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple/10_cfg__ddim__latent_blending.sh")
-    # run_one(in_vid, out_dir, script, 60)
-    # for i in inputs:
-    #     for s in scripts:
-    #         run_one(datasets_path / i, out_dir, Path(s))
-#
-    # rerun_metrics(Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_20_11"))
 
 if __name__ == "__main__":
     main()
