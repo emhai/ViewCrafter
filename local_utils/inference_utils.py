@@ -151,25 +151,18 @@ def main():
     # to_run_coffee = [4, 9, 10]
     # run_all(datasets_path, out_dir, to_run_coffee)
 
-
-
-    dataset_path = Path("/media/emmahaidacher/Volume/DATASETS/datasets_4x15/datasets")
-    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_22_12_mult")
-
+    out_dir = Path("/media/emmahaidacher/STORAGE8TB/RESULTS/0601/multiple")
+    
+    dataset_path = Path("/media/emmahaidacher/STORAGE8TB/DATASETS/MODIFIED/datasets_3x15_multiple/final_datasets")
     script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple_important/10_cfg__ddim__latent_blending.sh")
-    run_one_category_all_datasets(script, dataset_path, out_dir, 60)
-    script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple_important/8_cfg__ddim.sh")
-    run_one_category_all_datasets(script, dataset_path, out_dir, 60)
+    run_one_category_all_datasets(script, dataset_path, out_dir, 45)
 
-    dataset_path = Path("/media/emmahaidacher/Volume/DATASETS/datasets_3x15_single/datasets/yoga_3x15")
-    out_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_22_12_single")
+    out_dir = Path("/media/emmahaidacher/STORAGE8TB/RESULTS/0601/single")
 
+    dataset_path = Path("/media/emmahaidacher/STORAGE8TB/DATASETS/MODIFIED/datasets_3x15_single")
     script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/single_important/10_cfg__ddim__latent_blending.sh")
-    run_one(script, dataset_path, out_dir, 45)
-    script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/single_important/8_cfg__ddim.sh")
-    run_one(script, dataset_path, out_dir, 45)
-    script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/single_important/0_vanilla.sh")
-    run_one(script, dataset_path, out_dir, 45)
+    run_one_category_all_datasets(script, dataset_path, out_dir, 45)
+
 
 
 if __name__ == "__main__":

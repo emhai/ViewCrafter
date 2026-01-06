@@ -34,6 +34,36 @@ def make_side_by_side(original_video, changed_video, output_video, compare_heigh
 
     subprocess.run(cmd, check=True)
 
+def generate_16x9_videos(input_video, output_video, fps, start, duration, crop_mode):
+
+    w_expr = "if(gt(a\\,16/9)\\,ih*16/9\\,iw)"
+    h_expr = "if(gt(a\\,16/9)\\,ih\\,iw*9/16)"
+
+    x_expr = f"(iw-{w_expr})/2"
+
+    if crop_mode == "bottom":
+        y_expr = f"ih-{h_expr}"          # stick to bottom
+    else:
+        y_expr = f"(ih-{h_expr})/2"      # center vertically
+
+    vf = (
+        f"crop={w_expr}:{h_expr}:{x_expr}:{y_expr},"
+        f"fps={fps}"
+    )
+
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-ss", str(start),
+        "-i", str(input_video),
+        "-t", str(duration),
+        "-vf", vf,
+        "-c:v", "libx264",
+        "-c:a", "copy",
+        str(output_video),
+    ]
+    subprocess.run(cmd, check=True)
+
 def downsample_crop_cut_video(input_video, output_video, fps, start, duration, crop):
     if crop == "bottom":
         # center horizontally, stick to bottom vertically
@@ -235,7 +265,7 @@ def run(output_path, setup_duration, input_type="multiple"):
 
     output_path = output_path / f"datasets_{setup_duration[0]}x{setup_duration[1]}_{input_type}"
 
-    full_modified_dataset_path = output_path / "full_modified_datasets"
+    full_modified_dataset_path = output_path / "full_datasets"
     full_modified_dataset_path.mkdir(exist_ok=True, parents=True)
 
     modified_dataset_path = output_path / "modified_datasets"
@@ -244,7 +274,7 @@ def run(output_path, setup_duration, input_type="multiple"):
     frames_path = output_path / "frames"
     frames_path.mkdir(exist_ok=True, parents=True)
 
-    finished_dataset_path = output_path / "datasets"
+    finished_dataset_path = output_path / "final_datasets"
     finished_dataset_path.mkdir(exist_ok=True, parents=True)
 
     if input_type == "multiple":
@@ -259,6 +289,7 @@ def run(output_path, setup_duration, input_type="multiple"):
 
     generate_full_datasets(full_modified_dataset_path, setup_duration, paths, names, ss, crops)
     generate_filtered_datasets(full_modified_dataset_path, modified_dataset_path, names, video_names)
+
     generate_frames(modified_dataset_path, frames_path)
 
     if input_type == "multiple":
@@ -272,7 +303,8 @@ def main():
     #     temp_name = i.stem.split("_")[-1]
     #     os.rename(i, str(i.parent / f"temp_{temp_name}"))
     setup_duration = [3, 15]
-    output_path = Path("/media/emmahaidacher/Volume/DATASETS")
+    output_path = Path("/media/emmahaidacher/STORAGE8TB/DATASETS/MODIFIED")
+    run(output_path, setup_duration, "multiple")
     run(output_path, setup_duration, "single")
 
     #single_input_single_gt(Path("/media/emmahaidacher/Volume/DATASETS/datasets_4x15_single/modified_datasets"),

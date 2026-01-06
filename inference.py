@@ -87,16 +87,13 @@ if __name__=="__main__":
         upsample_folder_cv2(base_dir / GENERATED_FRAMES_DIR, 2, "lanczos")
         upsample_folder_cv2(base_dir / GENERATED_FRAMES_DIR, 2, "linear")
 
-    with timer.time("4dgs"):
-        exp_name = f"{opts.exp_name}_lanczos"
-        setup_4dgs_from_viewcrafter(base_dir / f"{GENERATED_FRAMES_DIR}_upsampled_lanczos", exp_name)
-        run_4dgs(exp_name)
-        # /home/emmahaidacher/Desktop/4DGaussians/output/multipleview/yoga_mul_lanczos/video/ours_14000/video_rgb.mp4
-        path_to_4dgs_video = PATH_TO_4DGS / "output" / "multipleview" / exp_name / "video" / "ours_14000" / "video_rgb.mp4"
-        if path_to_4dgs_video.exists():
-            shutil.copyfile(path_to_4dgs_video, base_dir / VIS_RESULTS_DIR / "4dgs_render_result.mp4")
-
-
-    # todo, time everything? 4dgs, visualize
-    # Create timings file
     timer.finish_timings(base_dir, opts.exp_name, opts.n_frames)
+
+    exp_name = f"{opts.exp_name}_lanczos"
+    setup_4dgs_from_viewcrafter(base_dir / f"{GENERATED_FRAMES_DIR}_upsampled_lanczos", exp_name)
+    run_4dgs(exp_name)
+
+    path_to_4dgs_video = PATH_TO_4DGS / "output" / "multipleview" / exp_name / "video" / "ours_14000" / "video_rgb.mp4"
+    if path_to_4dgs_video.exists():
+        shutil.copyfile(path_to_4dgs_video, base_dir / VIS_RESULTS_DIR / "4dgs_render_result.mp4")
+
