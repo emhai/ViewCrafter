@@ -72,5 +72,6 @@ def get_parser():
     parser.add_argument("--mask_type", choices=[m.name.lower() for m in MaskType], default="easi3r_prev")
     parser.add_argument("--msa", choices=[m.name.lower() for m in MSAType], default=None)
     parser.add_argument("--visualize_latents", action='store_true', default=False, help="save images of latents")
+    parser.add_argument("--known_gt", type=str, default=None, help="name of gt i want")
 
     return parser

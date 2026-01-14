@@ -7,7 +7,7 @@ from configs.v2v_config import *
 def run_one_category_all_datasets(script, dataset_path, out_dir, no_frames):
 
     if not out_dir.exists():
-        out_dir.mkdir()
+        out_dir.mkdir(parents=True)
 
     for dataset in dataset_path.iterdir():
         img_dir = dataset / "input"
@@ -151,18 +151,24 @@ def main():
     # to_run_coffee = [4, 9, 10]
     # run_all(datasets_path, out_dir, to_run_coffee)
 
-    out_dir = Path("/media/emmahaidacher/STORAGE8TB/RESULTS/0601/multiple")
-    
-    dataset_path = Path("/media/emmahaidacher/STORAGE8TB/DATASETS/MODIFIED/datasets_3x15_multiple/final_datasets")
+    out_dir = Path("/media/emmahaidacher/STORAGE8TB/RESULTS/1401/robosapiens")
+    dataset_path = Path("/media/emmahaidacher/STORAGE8TB/DATASETS/MODIFIED/datasets_4x15_multiple_robosapiens/final_datasets")
     script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple_important/10_cfg__ddim__latent_blending.sh")
-    run_one_category_all_datasets(script, dataset_path, out_dir, 45)
+    run_one_category_all_datasets(script, dataset_path, out_dir, 60)
+    script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple_important/0_vanilla.sh")
+    run_one_category_all_datasets(script, dataset_path, out_dir, 60)
+    script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple_important/8_cfg__ddim.sh")
+    run_one_category_all_datasets(script, dataset_path, out_dir, 60)
 
-    out_dir = Path("/media/emmahaidacher/STORAGE8TB/RESULTS/0601/single")
-
-    dataset_path = Path("/media/emmahaidacher/STORAGE8TB/DATASETS/MODIFIED/datasets_3x15_single")
+    out_dir = Path("/media/emmahaidacher/STORAGE8TB/RESULTS/1401/single")
+    dataset_path = Path("/media/emmahaidacher/STORAGE8TB/DATASETS/MODIFIED/datasets_3x15_single/final_datasets")
     script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/single_important/10_cfg__ddim__latent_blending.sh")
     run_one_category_all_datasets(script, dataset_path, out_dir, 45)
 
+    out_dir = Path("/media/emmahaidacher/STORAGE8TB/RESULTS/1401/multiple")
+    script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple_important/0_vanilla.sh")
+    dataset_path = Path("/media/emmahaidacher/STORAGE8TB/DATASETS/MODIFIED/datasets_3x15_multiple/working_datasets")
+    run_one_category_all_datasets(script, dataset_path, out_dir, 45)
 
 
 if __name__ == "__main__":

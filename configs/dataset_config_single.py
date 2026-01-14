@@ -27,6 +27,6 @@ single_video_names = [["cam05.mp4", "cam00.mp4"],                   # coffee
                       ]
 
 #               -coffee-    -spinach-   -steak-     -salmon-    -yoga-  -goats- -welder-    -flames-    -car-
-single_trajs = [[-5],       [6],        [-6],       [-6],       [-8],   [-4],   [4],        [-4],       [-6]]
+single_trajs = [[-5],       [5],        [-5],       [-5],       [-6],   [-3],   [3],        [-4],       [-5]]
 
 single_distances = ["near", "middle", "far", "v_far", "vv_far"]

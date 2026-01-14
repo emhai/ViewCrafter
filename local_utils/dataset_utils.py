@@ -160,6 +160,7 @@ def keep_middle_gt(dataset, new_path):
     dataset_videos = sorted(dataset.iterdir())  # todo what if more than 10 videos, is it still sorted corectly?
     amount_vids = len(dataset_videos)
     amount_runs = amount_vids // 2
+
     for i in range(amount_runs):
         middle_index = amount_runs
 
@@ -175,9 +176,12 @@ def keep_middle_gt(dataset, new_path):
         inputs.append(dataset_videos[left])
         inputs.append(dataset_videos[right])
 
-        distance = mult_distances[i]
+        if amount_runs == 1:
+            distance = ""
+        else:
+            distance = "_" + mult_distances[i]
 
-        new_folder = new_path / f"{dataset.name}_{distance}"
+        new_folder = new_path / f"{dataset.name}{distance}"
         new_folder.mkdir(exist_ok=True)
 
         gt_path = new_folder / "gt"
@@ -297,6 +301,37 @@ def run(output_path, setup_duration, input_type="multiple"):
     else:
         single_input_single_gt(modified_dataset_path, finished_dataset_path)
 
+def create_robo_dataset():
+
+    setup_duration = (4, 15)
+    input_type = "multiple"
+
+    output_path = Path("/media/emmahaidacher/STORAGE8TB/DATASETS/MODIFIED") / f"datasets_{setup_duration[0]}x{setup_duration[1]}_{input_type}_robosapiens"
+    output_path.mkdir(exist_ok=True)
+    robosapiens_dir = Path("/media/emmahaidacher/STORAGE8TB/DATASETS/OWN/ROBOSAPIENS")
+    finished_dataset_path = output_path / "final_datasets"
+    finished_dataset_path.mkdir(exist_ok=True)
+    full_folder = output_path / "full_datasets"
+    full_folder.mkdir(exist_ok=True)
+
+    for distance in robosapiens_dir.iterdir():
+        videos = distance / "shortened"
+        if not videos.is_dir():
+            continue
+
+        new_folder = full_folder / f"robosapiens{distance.name}_{setup_duration[0]}x{setup_duration[1]}"
+        new_folder.mkdir(exist_ok=True)
+
+        for file in Path(videos).iterdir():
+            if file.suffix != ".mp4":
+                continue
+            new_video = new_folder / file.name
+            downsample_crop_cut_video(file, new_video, setup_duration[1], 0, setup_duration[0], "center")
+
+    for distance in full_folder.iterdir():
+        keep_middle_gt(distance, finished_dataset_path)
+
+
 def main():
 
     # for i in Path("/media/emmahaidacher/Volume/GOOD_RESULTS/salmon_4dgs_ups").iterdir():
@@ -304,11 +339,12 @@ def main():
     #     os.rename(i, str(i.parent / f"temp_{temp_name}"))
     setup_duration = [3, 15]
     output_path = Path("/media/emmahaidacher/STORAGE8TB/DATASETS/MODIFIED")
-    run(output_path, setup_duration, "multiple")
+    # run(output_path, setup_duration, "multiple")
     run(output_path, setup_duration, "single")
 
     #single_input_single_gt(Path("/media/emmahaidacher/Volume/DATASETS/datasets_4x15_single/modified_datasets"),
                     #       Path("/media/emmahaidacher/Volume/DATASETS/datasets_4x15_single/datasets"))
 
+    # create_robo_dataset()
 if __name__ == "__main__":
     main()

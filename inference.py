@@ -74,9 +74,14 @@ if __name__=="__main__":
     separate_cameras(base_dir, DIFFUSION_FRAMES)
     separate_cameras(base_dir, RENDER_FRAMES)
 
+    if "robo" in opts.exp_name:
+        known_gt = "cam08"
+    else:
+        known_gt = None
+
     if opts.gt_dir is not None:
         with timer.time("metrics"):
-            run_metrics(base_dir)
+            run_metrics(base_dir, known_gt)
 
     with timer.time("visualize"):
         ffmpeg_nxn_video(base_dir / GENERATED_VIDEOS_DIR, base_dir / VIS_RESULTS_DIR)

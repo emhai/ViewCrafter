@@ -368,7 +368,7 @@ def pick_best_candidate(gt_frames_dir, candidate_frame_dirs, max_frames=None, st
     return results
 
 
-def run_metrics(base_dir):
+def run_metrics(base_dir, known_gt=None):
     results_file = init_results_file(base_dir)
     total_results_file = init_tot_results_file(base_dir)
 
@@ -383,32 +383,36 @@ def run_metrics(base_dir):
 
     for ground_truth_frame in (base_dir / GROUND_TRUTH_FRAMES_DIR).iterdir():
 
-        ranking_rendered = pick_best_candidate(
-            ground_truth_frame,
-            base_dir / RENDERED_FRAMES_DIR,
-            max_frames=11,
-            stride=6,
-        )
+        if known_gt is None:
+            ranking_rendered = pick_best_candidate(
+                ground_truth_frame,
+                base_dir / RENDERED_FRAMES_DIR,
+                max_frames=11,
+                stride=6,
+            )
 
-        # for debugging / comparison only
-        ranking_generated = pick_best_candidate(
-            ground_truth_frame,
-            base_dir / GENERATED_FRAMES_DIR,
-            max_frames=11,
-            stride=6,
-        )
+            # for debugging / comparison only
+            ranking_generated = pick_best_candidate(
+                ground_truth_frame,
+                base_dir / GENERATED_FRAMES_DIR,
+                max_frames=11,
+                stride=6,
+            )
 
-        best_rendered = ranking_rendered[0]
-        best_rendered_name = Path(best_rendered["candidate_dir"]).name
+            best_rendered = ranking_rendered[0]
+            best_rendered_name = Path(best_rendered["candidate_dir"]).name
 
-        best_generated = ranking_generated[0]
-        best_generated_name = Path(best_generated["candidate_dir"]).name
+            best_generated = ranking_generated[0]
+            best_generated_name = Path(best_generated["candidate_dir"]).name
 
-        print(f"\nBest RENDERED candidate (frames) for gt {ground_truth_frame.name}: {best_rendered['candidate_dir']}")
-        print(f"Best GENERATED candidate (frames) for gt {ground_truth_frame.name}: {best_generated['candidate_dir']}")
+            print(f"\nBest RENDERED candidate (frames) for gt {ground_truth_frame.name}: {best_rendered['candidate_dir']}")
+            print(f"Best GENERATED candidate (frames) for gt {ground_truth_frame.name}: {best_generated['candidate_dir']}")
 
-        if best_rendered_name == best_generated_name:
-            print("MATCH")
+            if best_rendered_name == best_generated_name:
+                print("MATCH")
+
+        else:
+            best_rendered_name = known_gt
 
         best_candidate = base_dir / GENERATED_FRAMES_DIR / best_rendered_name
         gt_name = ground_truth_frame.name
@@ -467,9 +471,6 @@ def run_metrics(base_dir):
             *vbench
         ])
 
-
-def run(original_path, synthesized_path):
-    pass
 
 def rerun_metrics(results_dir):
 
