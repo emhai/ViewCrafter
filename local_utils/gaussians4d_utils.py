@@ -157,44 +157,8 @@ def test_4dgs_after_complete_run(base_dir, exp_name):
      # run_4dgs(original_exp_name)
 
 def main():
-    # vcpath = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/yoga/cameras/")
-    # setup_4dgs_from_viewcrafter(vcpath, "yoga_vc")
-    # o_path = Path("/media/emmahaidacher/Volume/TESTS/test_sep/short_videos")
-    # setup_4dgs_from_videos(o_path, "yoga_og_cropped")
-    #setup_4dgs_from_videos(path, "spinach_2_cams")
-    # run_4dgs("spinach_2_cams")
+    pass
 
-    # from_png_to_jpg(path)
-    # rename_frames_from_number(path)
-    # setup_4dgs_from_viewcrafter(path, "multicam_w_original_vids")
-    # run_4dgs("multicam_w_original_vids")
-    #path_to_scripts = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/scripts")
-#
-    #GS_runs = ["yoga", "beef", "dance", "espresso", "corgi"]
-    #numbers = ["1", "3"]
-    #og = ["original_", ""]
-#
-    ## list comprehension
-    #combinations = [prefix + run + "_" + num
-    #                for prefix in og
-    #                for run in GS_runs
-    #                for num in numbers]
-#
-    #print(combinations)
-#
-    #for combi in combinations:
-    #    create_4dgs_shell(combi, path_to_scripts / f"{combi}.sh")
-#
-    # create_4dgs_shell("yoga_og_cropped", path_to_scripts / "yoga_og_cropped.sh")
-    # create_4dgs_shell("yoga_vc", path_to_scripts / "yoga_vc.sh")
-
-    # run_4dgs("yoga_vc")
-    # run_4dgs("yoga_og")
-    path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_11_12/coffee_3x15_near_10_cfg__ddim__latent_blending")
-    # test_4dgs_after_complete_run(path, "lb_ddim_cfg1_1112")
-    # run_4dgs("lb_ddim_cfg1_1112")
-    setup_4dgs_from_videos(Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_11_12/test_for_4dgs"), "test4dgs_1112")
-    run_4dgs("test4dgs_1112")
 
 if __name__ == '__main__':
     main()

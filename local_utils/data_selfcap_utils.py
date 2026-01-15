@@ -206,7 +206,7 @@ def peek_keys(yml_path, limit=50):
                         print("  ...")
                         return
 
-def read_camera(intri_path: str, extri_path: str = None, cam_names=[]):
+def read_camera(intri_path, output_path, extri_path):
 
     # rewritten from SelfCap repo
     assert os.path.isfile(intri_path), f"{intri_path} doesnt exist"
@@ -258,17 +258,16 @@ def read_camera(intri_path: str, extri_path: str = None, cam_names=[]):
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
-    plt.savefig("/media/emmahaidacher/Volume/DATASETS/INTERNET/SelfCap/corgi-release/optimized/cameras.png")
+    plt.savefig(output_path)
     plt.show()
 
 
 def main():
-    path_to_dataset = '/media/emmahaidacher/Volume/DATASETS/INTERNET/SelfCap/corgi-release/optimized/'
+    path_to_dataset = '...' # path to .../optimized
     intrinsics_path = os.path.join(path_to_dataset, 'intri.yml')
     extrinsics_path = os.path.join(path_to_dataset, 'extri.yml')
-    read_camera(intrinsics_path, extrinsics_path)
-    path = "/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/SelfCap/corgi-release/optimized/extri.yml"
-    # visualize_extrinsics_yaml(path)
+    output_path = ""
+    read_camera(intrinsics_path, output_path, extrinsics_path)
 
 if __name__ == '__main__':
     main()

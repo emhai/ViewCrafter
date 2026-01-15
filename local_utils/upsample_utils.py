@@ -91,9 +91,7 @@ def upsample_folder_realesrgan(in_folder, scale=2, tile=0, tile_pad=10, pre_pad=
 
 def main():
 
-    in_dir = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/salmon_4dgs")
-    # upsample_folder_realesrgan(in_dir, 2)
-    upsample_folder_cv2(in_dir, 2, "lanczos")
+    pass
 
 
 if __name__ == "__main__":

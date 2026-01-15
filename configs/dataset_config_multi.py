@@ -1,12 +1,12 @@
-mult_paths = [  "/media/emmahaidacher/STORAGE8TB/DATASETS/INTERNET/NEURAL_3D_VIDEO/coffee_martini",
-                "/media/emmahaidacher/STORAGE8TB/DATASETS/INTERNET/NEURAL_3D_VIDEO/cook_spinach/",
-                "/media/emmahaidacher/STORAGE8TB/DATASETS/INTERNET/NEURAL_3D_VIDEO/flame_steak/",
-                "/media/emmahaidacher/STORAGE8TB/DATASETS/INTERNET/NEURAL_3D_VIDEO/flame_salmon_1/",
-                "/media/emmahaidacher/STORAGE8TB/DATASETS/INTERNET/SELFCAP/yoga-release/videos",
-                "/media/emmahaidacher/STORAGE8TB/DATASETS/INTERNET/GOOGLE_LIGHTFIELD/06_Goats",
-                "/media/emmahaidacher/STORAGE8TB/DATASETS/INTERNET/GOOGLE_LIGHTFIELD/01_Welder",
-                "/media/emmahaidacher/STORAGE8TB/DATASETS/INTERNET/GOOGLE_LIGHTFIELD/02_Flames",
-                "/media/emmahaidacher/STORAGE8TB/DATASETS/INTERNET/GOOGLE_LIGHTFIELD/07_Car",
+mult_paths = [  "/mnt/data/DATASETS/INTERNET/NEURAL_3D_VIDEO/coffee_martini",
+                "/mnt/data/DATASETS/INTERNET/NEURAL_3D_VIDEO/cook_spinach/",
+                "/mnt/data/DATASETS/INTERNET/NEURAL_3D_VIDEO/flame_steak/",
+                "/mnt/data/DATASETS/INTERNET/NEURAL_3D_VIDEO/flame_salmon_1/",
+                "/mnt/data/DATASETS/INTERNET/SELFCAP/yoga-release/videos",
+                "/mnt/data/DATASETS/INTERNET/GOOGLE_LIGHTFIELD/06_Goats",
+                "/mnt/data/DATASETS/INTERNET/GOOGLE_LIGHTFIELD/01_Welder",
+                "/mnt/data/DATASETS/INTERNET/GOOGLE_LIGHTFIELD/02_Flames",
+                "/mnt/data/DATASETS/INTERNET/GOOGLE_LIGHTFIELD/07_Car",
                 ]
 
 mult_names = ["coffee", "spinach", "steak", "salmon", "yoga", "goats", "welder", "flames", "car"]

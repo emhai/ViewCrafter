@@ -135,7 +135,7 @@ def compute_bg_mask_last_n_frames(base_dir, current_frame=None, n_last_frames=No
 
 
 def main():
-    compute_bg_mask_last_n_frames(Path("/media/emmahaidacher/Volume/GOOD_RESULTS/20251014_1554_yoga_debug"), 10, 12)
+    pass
 
 if __name__ == "__main__":
     main()

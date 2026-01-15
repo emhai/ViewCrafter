@@ -306,9 +306,9 @@ def create_robo_dataset():
     setup_duration = (4, 15)
     input_type = "multiple"
 
-    output_path = Path("/media/emmahaidacher/STORAGE8TB/DATASETS/MODIFIED") / f"datasets_{setup_duration[0]}x{setup_duration[1]}_{input_type}_robosapiens"
+    output_path = Path("/mnt/data/DATASETS/MODIFIED") / f"datasets_{setup_duration[0]}x{setup_duration[1]}_{input_type}_robosapiens"
     output_path.mkdir(exist_ok=True)
-    robosapiens_dir = Path("/media/emmahaidacher/STORAGE8TB/DATASETS/OWN/ROBOSAPIENS")
+    robosapiens_dir = Path("/mnt/data/DATASETS/OWN/ROBOSAPIENS")
     finished_dataset_path = output_path / "final_datasets"
     finished_dataset_path.mkdir(exist_ok=True)
     full_folder = output_path / "full_datasets"
@@ -334,17 +334,12 @@ def create_robo_dataset():
 
 def main():
 
-    # for i in Path("/media/emmahaidacher/Volume/GOOD_RESULTS/salmon_4dgs_ups").iterdir():
-    #     temp_name = i.stem.split("_")[-1]
-    #     os.rename(i, str(i.parent / f"temp_{temp_name}"))
     setup_duration = [3, 15]
-    output_path = Path("/media/emmahaidacher/STORAGE8TB/DATASETS/MODIFIED")
+    output_path = Path("/mnt/data/DATASETS/MODIFIED")
     # run(output_path, setup_duration, "multiple")
-    run(output_path, setup_duration, "single")
+    # run(output_path, setup_duration, "single")
+    create_robo_dataset()
 
-    #single_input_single_gt(Path("/media/emmahaidacher/Volume/DATASETS/datasets_4x15_single/modified_datasets"),
-                    #       Path("/media/emmahaidacher/Volume/DATASETS/datasets_4x15_single/datasets"))
 
-    # create_robo_dataset()
 if __name__ == "__main__":
     main()

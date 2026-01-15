@@ -201,14 +201,13 @@ def process_scene(scene_dir: Path):
 
 
 def main():
-    DATA_ROOT = Path("/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/google_lightfield")  # folder with all scene zips extracted
+    DATA_ROOT = Path("...")  # folder with all scene zips extracted
 
     for scene_dir in sorted(DATA_ROOT.iterdir()):
         if scene_dir.is_dir():
             process_scene(scene_dir)
 
-    glf_path = Path("/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/google_lightfield")
-    for dir in glf_path.iterdir():
+    for dir in DATA_ROOT.iterdir():
         if dir.is_dir():
             if (dir / "models.json").exists():
                 visualize_camera_positions(dir / "models.json")

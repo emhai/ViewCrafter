@@ -68,7 +68,7 @@ def visualize_poses_bounds(path):
     plt.show()
 
 def main():
-    path_to_dataset = Path("/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/4dgs_dataset/flame_salmon_1/poses_bounds.npy")
+    path_to_dataset = Path("...") # path to poses_bounds.npy
     visualize_poses_bounds(path_to_dataset)
 
 

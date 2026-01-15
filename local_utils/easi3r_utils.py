@@ -160,14 +160,7 @@ def run_easi3r_from_viewcrafter(base_path, n_frames):
     print("done")
 
 def main():
-    path = Path("/media/emmahaidacher/Volume/DATASETS/INTERNET/espresso_short/4dgs_1_cam_downsampled")
-    # video = path / "4.mp4"
-    # res = [2, 4, 8]
-    # for r in res:
-    #     downsample_video(video, r)
-
-    for video in path.iterdir():
-        run_easi3r_from_video(video, path, video.stem, 60)
+    pass
 
 if __name__ == "__main__":
     main()

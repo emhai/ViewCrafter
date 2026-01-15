@@ -195,7 +195,7 @@ def export_for_4dgs(
     print(" - poses_bounds_multipleview.npy")
 
 def main():
-    path = Path("/media/emmahaidacher/Volume/DATASETS/INTERNET/espresso_short/4dgs_1_cam_downsampled")
+    pass
 
 if __name__ == "__main__":
     main()

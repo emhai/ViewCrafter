@@ -551,15 +551,8 @@ def combine_files_per_dataset(results_dir):
 
 def main():
 
-    original_path = ""
-    synthesized_path = ""
-
-    # run(original_path, synthesized_path)
-
-    base_path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_26_11")
-    rerun_path = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/all_results_with_bad")
+    base_path = Path("...")
     # run_metrics(base_path)
-    # rerun_metrics(rerun_path)
     combine_files_per_dataset(base_path)
 
 if __name__ == "__main__":

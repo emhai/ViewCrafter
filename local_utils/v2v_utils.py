@@ -218,7 +218,7 @@ def separate_cameras(base_dir, frame_type):
         create_video(all_frames_folder, output_videos_folder)
 
 # https://learnopencv.com/simple-background-estimation-in-videos-using-opencv-c-python/
-def estimate_background(video):
+def estimate_background(video, output_path):
     frames = []
     cap = cv2.VideoCapture(video)
     while True:
@@ -230,10 +230,9 @@ def estimate_background(video):
 
     background = np.median(frames, axis=0).astype(np.uint8)
 
-    cv2.imwrite('/media/emmahaidacher/Volume/TESTS/bg.png', background)
+    cv2.imwrite(output_path, background)
 
-def clean_empty_camera_folders():
-    base_folder = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/")
+def clean_empty_camera_folders(base_folder):
     for sub in base_folder.iterdir():
         if not sub.is_dir():
             continue
@@ -261,46 +260,7 @@ def print_diffusion_model(model, max_depth=3, prefix='', depth=0):
         print_diffusion_model(child, max_depth, prefix=name + ': ', depth=depth + 1)
 
 def main():
-    results_folder = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/20251020_1740_yoga_debug/results")
-    cameras_folder = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/20251020_1740_yoga_debug/cameras")
-    # input_vid = "/home/emmahaidacher/Masterthesis/MasterThesis/noisy_espresso_video/test.mp4"
-    # output_folder = "/home/emmahaidacher/Masterthesis/MasterThesis/noisy_espresso_video/frames"
-    # extract_frames(input_vid, output_folder)
-    # img1 = "/media/emmahaidacher/Volume/GOOD_RESULTS/espresso_1cam_16frames_pickle_deflick_reuse_latent_alpha8/camera_frames/0/00001.png"
-    # img2 = "/media/emmahaidacher/Volume/GOOD_RESULTS/espresso_1cam_16frames_pickle_deflick_reuse_latent_alpha8/camera_frames/0/00002.png"
-    # vid = "/media/emmahaidacher/Volume/DATASETS/INTERNET/espresso_short/1_video_short/0.mp4"
-    # estimate_background(vid)
-    # separate_cameras(results_folder, cameras_folder, DIFFUSION_FRAMES)
-    # separate_cameras(results_folder, cameras_folder, RENDER_FRAMES)
-
-    output_path = Path("/media/emmahaidacher/Volume/DATASETS/MODIFIED_DATASETS")
-    input_path = Path("/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/SelfCap/bike-release/videos")
-    # input_path = Path("/media/emmahaidacher/Volume/DATASETS/INTERNET_DATASETS/SelfCap/yoga3/")
-    # output_path = Path("/media/emmahaidacher/Volume/TESTS/test_sep")
-    # output_path.mkdir(exist_ok=True)
-    # setup_structure(output_path, input_path, 16)
-    #clean_empty_camera_folders()
-    # clean_mask("")
-    # vid_path_in = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_26_11/10_cfg__ddim__latent_blending_salmon_3x15_near/generated_videos")
-    # vid_path_out = Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_26_11/10_cfg__ddim__latent_blending_salmon_3x15_near/vis_results")
-    # ffmpeg_4x4_video(vid_path_in, vid_path_out)
-    # separate_cameras(Path("/media/emmahaidacher/Volume/GOOD_RESULTS/20251216_1646_coffee"), DIFFUSION_FRAMES)
-
-    # for folder in Path("/media/emmahaidacher/Volume/GOOD_RESULTS/results_16_12").iterdir():
-    #     if len(list((folder / "rendered_videos").iterdir())) > 0:
-    #         gt_video = list((folder / "gt_videos").rglob("*.mp4"))[0]
-#
-    #         ffmpeg_overlay_5050(gt_video, folder / "rendered_videos" / "cam16.mp4", folder / "r_overlay.mp4")
-    #         ffmpeg_overlay_5050(gt_video, folder / "generated_videos" / "cam16.mp4", folder / "g_overlay.mp4")
-    #         ffmpeg_side_by_side_vid(gt_video, folder / "rendered_videos" / "cam16.mp4", folder / "r_sbs.mp4")
-    #         ffmpeg_side_by_side_vid(gt_video, folder / "generated_videos" / "cam16.mp4", folder / "g_sbs.mp4")
-
-    vid1 = Path("/home/emmahaidacher/Desktop/4DGaussians/output/multipleview/coffee_4dgs/video/ours_14000/video_rgb.mp4")
-    vid2 = Path("/home/emmahaidacher/Desktop/4DGaussians/output/multipleview/coffee_4dgs_upsampled_lanczos/video/ours_14000/video_rgb.mp4")
-    output = Path("/home/emmahaidacher/Videos/res_diff.mp4")
-    ffmpeg_side_by_side_vid(vid1, vid2, output)
-
-
+    pass
 
 if __name__ == "__main__":
     main()
