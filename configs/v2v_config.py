@@ -1,6 +1,8 @@
 from enum import Enum
 
 PATH_TO_REPO = "/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/"
+PATH_TO_DATASETS = "/mnt/data/DATASETS"
+PATH_TO_RESULTS = "/mnt/data/RESULTS"
 
 OUTPUT_LOG_FILE = "output.log"                  # file to log all output not necessary in terminal
 RESULTS_CSV_FILE = "results.csv"                # file for all results, metrics ...

@@ -10,6 +10,7 @@ def run_one_category_all_datasets(script, dataset_path, out_dir, no_frames):
         out_dir.mkdir(parents=True)
 
     for dataset in dataset_path.iterdir():
+        print("running", dataset)
         img_dir = dataset / "input"
         gt_dir = dataset / "gt"
         exp_name = f"{script.stem}_{dataset.name}"
@@ -39,16 +40,19 @@ def run_one_category_all_datasets(script, dataset_path, out_dir, no_frames):
             print(f"Script {modified} failed with return code {e.returncode}")
 
 
-def run_one_dataset_all_categories(dataset_path, out_dir):
-    scripts_dir = Path(PATH_TO_REPO) / "master_scripts" / "multiple_short"
+def run_one_dataset_all_categories(scripts_dir, dataset_path, out_dir, no_frames):
 
     if not out_dir.exists():
         out_dir.mkdir()
 
     img_dir = dataset_path / "input"
     gt_dir = dataset_path / "gt"
-    no_frames = 60
     for script in scripts_dir.iterdir():
+
+        if str(script.stem).split("_")[0] == "temp":
+            print("running", script)
+            continue
+
         exp_name = f"{script.stem}_{dataset_path.name}"
         text = script.read_text()
 
@@ -61,6 +65,9 @@ def run_one_dataset_all_categories(dataset_path, out_dir):
         }
         for old, new in replacements.items():
             text = text.replace(old, new)
+
+        if "TRAJ_DIR" in text:
+            text = text.replace("TRAJ_DIR", str(dataset_path / "traj.txt"))
 
         modified = scripts_dir / f"temp_{script.name}"
         new_text = f"cd {PATH_TO_REPO}\n" + text
@@ -112,7 +119,7 @@ def run_all(datasets_path, out_dir, scripts_to_run, no_frames):
                 except FileNotFoundError:
                     pass
 
-def run_one(dataset_path, out_dir, script_to_run, no_frames):
+def run_one(script_to_run, dataset_path, out_dir,  no_frames):
     if not out_dir.exists():
         out_dir.mkdir()
 
@@ -144,32 +151,36 @@ def run_one(dataset_path, out_dir, script_to_run, no_frames):
         except FileNotFoundError:
             pass
 
+
+def exists_all(in_dir, script):
+    exist = in_dir.exists() and script.exists()
+    if not exist:
+        print(f"Script {script} or in_dir {in_dir} does not exist")
+    return exist
+
 def main():
 
-    # out_dir = Path(PATH_TO_GOOD_RESULTS) / "results_26_11"
-    # datasets_path = Path(PATH_TO_DATASETS) / "near_middle_coffee_yoga_goats"
-    # to_run_coffee = [4, 9, 10]
-    # run_all(datasets_path, out_dir, to_run_coffee)
+    # COFFEE, ALL
+    # 6 * 45 + 4 * 20 = 6h
+    out_dir = Path(PATH_TO_RESULTS) / "all_coffee_single"
+    dataset_path = Path(PATH_TO_DATASETS) / "MODIFIED" / "datasets_3x15_single" / "important_datasets" / "coffee_3x15"
+    script = Path(PATH_TO_REPO) / "master_scripts" / "single_important_few"
 
-    out_dir = Path("/mnt/data/RESULTS/1401/robosapiens")
-    dataset_path = Path("/mnt/data/DATASETS/MODIFIED/datasets_4x15_multiple_robosapiens/datasets_without_3")
-    script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple_important/0_vanilla.sh")
-    run_one_category_all_datasets(script, dataset_path, out_dir, 60)
+    if exists_all(dataset_path, script):
+        run_one_dataset_all_categories(script, dataset_path, out_dir, 45)
 
-    dataset_path = Path("/mnt/data/DATASETS/MODIFIED/datasets_4x15_multiple_robosapiens/final_datasets")
-    script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple_important/8_cfg__ddim.sh")
-    run_one_category_all_datasets(script, dataset_path, out_dir, 60)
+    # SPINACH, ALL
+    # 6 * 45 + 4 * 20 = 6h
+    out_dir = Path(PATH_TO_RESULTS) / "all_spinach_single"
+    dataset_path = Path(PATH_TO_DATASETS) / "MODIFIED" / "datasets_3x15_single" / "important_datasets" / "spinach_3x15"
+    script = Path(PATH_TO_REPO) / "master_scripts" / "single_important_few"
 
-    out_dir = Path("/mnt/data/RESULTS/1401/single")
-    dataset_path = Path("/mnt/data/DATASETS/MODIFIED/datasets_3x15_single/final_datasets")
-    script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/single_important/10_cfg__ddim__latent_blending.sh")
-    run_one_category_all_datasets(script, dataset_path, out_dir, 45)
+    if exists_all(dataset_path, script):
+        run_one_dataset_all_categories(script, dataset_path, out_dir, 45)
 
-    out_dir = Path("/mnt/data/RESULTS/1401/multiple")
-    script = Path("/home/emmahaidacher/Desktop/ViewCrafterFork/ViewCrafter/master_scripts/multiple_important/0_vanilla.sh")
-    dataset_path = Path("/mnt/data/DATASETS/MODIFIED/datasets_3x15_multiple/working_datasets")
-    run_one_category_all_datasets(script, dataset_path, out_dir, 45)
-
+    # ALLES ZUSAMMEN: 56h
+    # ANFANG 19.01. 20:00
+    # ENDE   22.01. 04:00
 
 if __name__ == "__main__":
     main()

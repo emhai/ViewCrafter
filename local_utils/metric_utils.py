@@ -484,7 +484,7 @@ def rerun_metrics(results_dir):
         if tot_result_file.exists():
             tot_result_file.unlink()
         if vis_folder.exists():
-            shutil.rmtree(vis_folder)
+            # todo ???? shutil.rmtree(vis_folder)
             vis_folder.mkdir()
 
         run_metrics(result)
@@ -551,9 +551,9 @@ def combine_files_per_dataset(results_dir):
 
 def main():
 
-    base_path = Path("...")
+    base_path = Path(PATH_TO_RESULTS) / "all_coffee_single"
     # run_metrics(base_path)
-    combine_files_per_dataset(base_path)
+    combine_files(base_path)
 
 if __name__ == "__main__":
     main()

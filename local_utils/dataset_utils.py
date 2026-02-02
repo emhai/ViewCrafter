@@ -303,7 +303,7 @@ def run(output_path, setup_duration, input_type="multiple"):
 
 def create_robo_dataset():
 
-    setup_duration = (4, 15)
+    setup_duration = (4, 30)
     input_type = "multiple"
 
     output_path = Path("/mnt/data/DATASETS/MODIFIED") / f"datasets_{setup_duration[0]}x{setup_duration[1]}_{input_type}_robosapiens"
@@ -337,8 +337,8 @@ def main():
     setup_duration = [3, 15]
     output_path = Path("/mnt/data/DATASETS/MODIFIED")
     # run(output_path, setup_duration, "multiple")
-    # run(output_path, setup_duration, "single")
-    create_robo_dataset()
+    run(output_path, setup_duration, "single")
+    # create_robo_dataset()
 
 
 if __name__ == "__main__":

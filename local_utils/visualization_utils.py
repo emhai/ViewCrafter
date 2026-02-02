@@ -1,17 +1,18 @@
 import json
+import shutil
 from pathlib import Path
 
 import cv2
 import numpy as np
 import torch
-from PIL import Image
+from PIL import Image, ImageDraw
 from matplotlib import pyplot as plt
 
 import torch.nn.functional as F
 from torchvision.utils import save_image
 import torchvision.transforms.functional as TF
 
-from configs.v2v_config import LATENTS_DIR, MASKS_DIR, EASI3R_MASKS_DIR
+from configs.v2v_config import LATENTS_DIR, MASKS_DIR, EASI3R_MASKS_DIR, RESULTS_DIR, PATH_TO_RESULTS
 
 
 def save_masks(mask_list, save_dir, visualize=True, save=True):
@@ -143,6 +144,35 @@ def visualize_latents(base_dir, intermediates, model, prefix="x_inter"):
             img.close()
 
 
+def crop_and_visualize_border(input_image, box, box_name="", box_color="", offset=0):
+    # Load image
+    img = Image.open(str(input_image)).convert("RGB")
+
+    if "ground_truth" in str(input_image):
+        new_box = (box[0], box[1] + offset, box[2], box[3] + offset)
+    else:
+        new_box = box
+
+    img_copy = img.copy()
+
+    draw = ImageDraw.Draw(img)
+    draw.rectangle(new_box, outline=box_color, width=4)
+    img.save(str(input_image))
+
+    crop = img_copy.crop(new_box)
+    folder = input_image.parent
+    new_folder = folder / box_name
+    new_folder.mkdir(exist_ok=True)
+    crop.save(str(new_folder / input_image.name))
+
+def cfg_color_comparison():
+    for img in (Path(PATH_TO_RESULTS) / "test_color_vis").iterdir():
+        marked_image = img.parent / f"{img.stem}_marked{img.suffix}"
+        shutil.copyfile(img, marked_image)
+        crop_and_visualize_border(marked_image, (350, 110, 650, 410), "man", "red")
+        # crop_and_visualize_border(marked_image, (70, 140, 270, 340), "window_left", "red")
+        crop_and_visualize_border(marked_image, (910, 150, 1020, 260), "window_right", "red", -10)
+        crop_and_visualize_border(marked_image, (710, 210, 800, 300), "bottles", "red", -10)
 
 def main():
     pass

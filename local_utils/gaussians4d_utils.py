@@ -10,6 +10,7 @@ from configs.v2v_config import GENERATED_FRAMES_DIR
 
 PATH_TO_4DGS = Path("/home/emmahaidacher/Desktop/4DGaussians")
 
+
 def run_command(cmd):
     cmd = shlex.split(cmd)
     proc = subprocess.run(cmd, capture_output=True, text=True, cwd=PATH_TO_4DGS)
@@ -22,8 +23,8 @@ def run_command(cmd):
 
     return proc.returncode == 0
 
-def run_4dgs(exp_name):
 
+def run_4dgs(exp_name):
     # From https://github.com/hustvl/4DGaussians
     # For multipleviews scenes: If you want to train your own dataset of multipleviews scenes, you can orginize your dataset as follows:
     # ├── data
@@ -67,7 +68,6 @@ def run_4dgs(exp_name):
 
 
 def create_4dgs_shell(exp_name, output_file):
-
     commands = [
         f'bash multipleviewprogress.sh {exp_name}',
         f'python train.py -s data/multipleview/{exp_name} --port 6017 --expname "multipleview/{exp_name}" --configs arguments/multipleview/default.py',
@@ -83,8 +83,8 @@ def create_4dgs_shell(exp_name, output_file):
 
     shell_path.chmod(0o755)
 
-def setup_4dgs_from_viewcrafter(frames_dir, exp_name):
 
+def setup_4dgs_from_viewcrafter(frames_dir, exp_name):
     output_folder = PATH_TO_4DGS / "data" / "multipleview" / exp_name
     output_folder.mkdir(exist_ok=True)
 
@@ -92,14 +92,12 @@ def setup_4dgs_from_viewcrafter(frames_dir, exp_name):
         if folder.is_dir():
             shutil.copytree(str(folder), str(output_folder / folder.name))
 
-    
-def setup_4dgs_from_videos(video_folder, exp_name):
 
+def setup_4dgs_from_videos(video_folder, exp_name):
     output_folder = PATH_TO_4DGS / "data" / "multipleview" / exp_name
     output_folder.mkdir()
 
     for i, video in enumerate(sorted(video_folder.iterdir()), start=1):
-
         target_path = output_folder / f"cam{i:02}"
         print(f"Extracting frames from {video}")
         target_path.mkdir()
@@ -107,14 +105,15 @@ def setup_4dgs_from_videos(video_folder, exp_name):
         cmd = f'ffmpeg  -i {str(video)} -start_number 1 {str(target_path)}/frame_%05d.jpg'
         run_command(cmd)
 
-def from_png_to_jpg(folder):
 
+def from_png_to_jpg(folder):
     folder = Path(folder)
     for p in folder.rglob("*.png"):
         img = Image.open(p).convert("RGB")
         out_path = p.with_suffix(".jpg")
         img.save(out_path, "JPEG")
         p.unlink()
+
 
 def rename_frames(folder):
     folder = Path(folder)
@@ -129,6 +128,7 @@ def rename_frames(folder):
         num = int(p.stem.split("_")[-1])
         p.rename(p.with_name(f"frame_{num + 1:05}.jpg"))
 
+
 def rename_frames_from_number(folder):
     folder = Path(folder)
 
@@ -142,22 +142,27 @@ def rename_frames_from_number(folder):
         num = int(p.stem)
         p.rename(p.with_name(f"frame_{num:05}.jpg"))
 
+
 def test_4dgs_after_complete_run(base_dir, exp_name):
-     setup_4dgs_from_viewcrafter(base_dir, exp_name)
-#
+    #setup_4dgs_from_viewcrafter(base_dir, exp_name)
+    #
     # original_exp_name = "original_" + exp_name
     # setup_4dgs_from_videos(self.base_dir / ORIGINAL_VIDEOS_DIR, original_exp_name)
-#
+    #
     # torch.cuda.synchronize()  # finish kernels
     # torch.cuda.empty_cache()  # release cached blocks to the driver
     # torch.cuda.ipc_collect()  # clean IPC memory
     # del self.diffusion  # todo, works?
 
-     run_4dgs(exp_name)
-     # run_4dgs(original_exp_name)
+    # run_4dgs(exp_name)
+    # run_4dgs(original_exp_name)
+    pass
+
+
 
 def main():
-    pass
+    setup_4dgs_from_videos(Path("/home/emmahaidacher/Desktop/4DGaussians/data/multipleview/original_ds_salmon_3"),
+                           "o_downsampled_salmon_3")
 
 
 if __name__ == '__main__':

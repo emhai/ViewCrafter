@@ -61,6 +61,9 @@ class ViewCrafter:
             assert os.path.isdir(self.opts.image_dir)
 
             self.base_dir = Path(self.opts.save_dir)
+            print(self.base_dir)
+            print(self.opts.image_dir)
+            print(self.opts.gt_dir)
             setup_structure(self.base_dir, Path(self.opts.image_dir), Path(self.opts.gt_dir))
 
             with self.timer.time("easi3r"):

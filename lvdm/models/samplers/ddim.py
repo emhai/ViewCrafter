@@ -77,14 +77,13 @@ class DDIMSampler(object):
                        unconditional_guidance_scale=1.0,
                        **kwargs):
         """
-        DDIM Inversion: converts generated latents x0 back to noise x_T
+        DDIM Inversion: converts generated video x0 back to noise x_T
 
         Args:
             x0: Clean latent frames from run 0 [B, C, T, H, W]
             cond: Conditioning dict with c_crossattn and c_concat from run 0
-            ddim_steps: Number of inversion steps (should match generation)
-            verbose: Show progress bar
-            ddim_eta: Should be 0.0 for deterministic inversion
+            ddim_steps: Number of inversion steps (must match generation)
+            ddim_eta: Should be 0.0 for det. inversion
             unconditional_conditioning: For CFG during inversion (if used)
             unconditional_guidance_scale: CFG scale during inversion
 
@@ -120,22 +119,18 @@ class DDIMSampler(object):
             index = i  # For inversion, we go forward through indices
             ts = torch.full((b,), step, device=device, dtype=torch.long)
 
-            # Predict noise at current timestep
             if unconditional_conditioning is None or unconditional_guidance_scale == 1.:
                 model_output = self.model.apply_model(x_t, ts, cond, **kwargs)
             else:
-                # Apply CFG during inversion (if you used it during generation)
                 e_t_cond = self.model.apply_model(x_t, ts, cond, **kwargs)
                 e_t_uncond = self.model.apply_model(x_t, ts, unconditional_conditioning, **kwargs)
                 model_output = e_t_uncond + unconditional_guidance_scale * (e_t_cond - e_t_uncond)
 
-            # Convert to noise prediction if using v-parameterization
             if self.model.parameterization == "v":
                 e_t = self.model.predict_eps_from_z_and_v(x_t, ts, model_output)
             else:
                 e_t = model_output
 
-            # Get alpha values for inversion step
             alphas = self.ddim_alphas
             alphas_prev = self.ddim_alphas_prev
             sqrt_one_minus_alphas = self.ddim_sqrt_one_minus_alphas
@@ -145,18 +140,17 @@ class DDIMSampler(object):
             else:
                 size = (b, 1, 1, 1)
 
-            # For inversion, we go from t to t+1
-            # So we swap the roles of alpha_t and alpha_prev
+            # For inversion, we go from t to t+1 so the roles of alpha_t and alpha_prev swap
             if i < total_steps - 1:
-                # Current timestep (lower noise)
+                # Current ts
                 a_t = torch.full(size, alphas[index], device=device)
                 sqrt_one_minus_at = torch.full(size, sqrt_one_minus_alphas[index], device=device)
 
-                # Next timestep (higher noise)
+                # Next ts (more noise)
                 a_next = torch.full(size, alphas[index + 1], device=device)
                 sqrt_one_minus_a_next = torch.full(size, sqrt_one_minus_alphas[index + 1], device=device)
             else:
-                # Last step: go to pure noise
+                # Last ts: go to pure noise
                 a_t = torch.full(size, alphas[index], device=device)
                 sqrt_one_minus_at = torch.full(size, sqrt_one_minus_alphas[index], device=device)
                 a_next = torch.full(size, 0.0, device=device)  # Pure noise
