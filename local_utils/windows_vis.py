@@ -149,6 +149,26 @@ def make_horizontal_slit_scan(
 
     print(f"Saved horizontal slit-scan to {output_path}")
 
+def stitch_with_mask():
+
+    img_a_path = "Z:\ORGA\\figures\\from_viewcrafter\\salmon_all\\cfg_ddim\\cam09\\frame_00001.jpg"
+    img_b_path = "Z:\ORGA\\figures\\from_viewcrafter\\salmon_all\\cfg_ddim\\cam09\\frame_00015.jpg"
+    mask_path = "Z:\\ORGA\\figures\\from_viewcrafter\\\salmon_all\\bg_mask_0001.png"
+
+    img_a = cv2.imread(img_a_path)
+    img_b = cv2.imread(img_b_path)
+    mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+
+    H, W = img_a.shape[:2]
+    m = cv2.resize(mask, (W, H), interpolation=cv2.INTER_NEAREST)
+
+    # ensure {0,1}
+    m = (m > 0).astype(img_a.dtype)
+
+    res = img_a * m[..., None] + img_b * (1 - m[..., None])
+
+    cv2.imwrite("upsampled_mask.png", m)
+    cv2.imwrite("stitched.png", res)
 def main():
     #path = Path("Z:\\ORGA\\figures\\from_viewcrafter\\ddim_comparison\\cam_08_cfg_1.jpg")
     #crop_with_red_border(path)
@@ -167,31 +187,32 @@ def main():
     #path1 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\ddim_comparison\\cam_08_cfg_1_crop.jpg")
     #path2 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\ddim_comparison\\cam_08_ddim_cfg_29_crop.jpg")
     #out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\ddim_comparison\\cfg_ddim_diff_29.jpg")
-    slice_h = 12
-    dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\all_modifications\\generated_frames\\cam08")
-    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\all_modifications_horizontal_slice.png")
-    make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h)
-
-    dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\only_ddim\\generated_frames\\cam08")
-    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\only_ddim_horizontal_slice.png")
-    make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h)
-
-    dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\only_cfg\\generated_frames\\cam08")
-    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\only_cfg_horizontal_slice.png")
-    make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h)
-
-    dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\ddim_plus_cfg\\generated_frames\\cam08")
-    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\ddim_plus_cfg_horizontal_slice.png")
-    make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h)
-
-    dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\vanilla\\generated_frames\\cam08")
-    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\vanilla_horizontal_slice.png")
-    make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h)
-
-    dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\original_frames\\0001")
-    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\original_horizontal_slice.png")
-    make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h)
+    # slice_h = 12
+    # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\all_modifications\\generated_frames\\cam08")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\all_modifications_horizontal_slice.png")
+    # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h)
+#
+    # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\only_ddim\\generated_frames\\cam08")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\only_ddim_horizontal_slice.png")
+    # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h)
+#
+    # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\only_cfg\\generated_frames\\cam08")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\only_cfg_horizontal_slice.png")
+    # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h)
+#
+    # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\ddim_plus_cfg\\generated_frames\\cam08")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\ddim_plus_cfg_horizontal_slice.png")
+    # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h)
+#
+    # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\vanilla\\generated_frames\\cam08")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\vanilla_horizontal_slice.png")
+    # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h)
+#
+    # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\original_frames\\0001")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\original_horizontal_slice.png")
+    # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h)
 
     #save_image_difference(path1, path2, out)
+    stitch_with_mask()
 if __name__ == "__main__":
     main()
