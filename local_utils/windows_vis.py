@@ -6,6 +6,8 @@ import os
 import cv2
 import numpy as np
 
+from configs.v2v_config import PATH_TO_RESULTS
+
 
 def crop_with_red_border(path):
     img = Image.open(str(path)).convert("RGB")
@@ -209,6 +211,35 @@ def plot_metric_ablation(x, y1, y2, title, ylabel, out_path):
     plt.legend()
     plt.savefig(str(out_path))
 
+def ablation_single_helper():
+    x = [0, 1, 2, 3, 4]
+
+    # FVD (↓)
+    fvd_coffee = [1642, 1857, 1710, 1077, 1027]
+    fvd_spinach = [1085, 1039, 1283, 922, 934]
+
+    # FVMD (↓)
+    fvmd_coffee = [836, 832, 833, 290, 235]
+    fvmd_spinach = [686, 690, 722, 559, 369]
+
+    # LPIPS (↓)
+    lpips_coffee = [0.508, 0.515, 0.518, 0.520, 0.521]
+    lpips_spinach = [0.494, 0.448, 0.462, 0.445, 0.439]
+
+    # Temporal Flickering (↑)
+    tf_coffee = [96.4, 97.1, 96.6, 99.4, 99.7]
+    tf_spinach = [97.9, 98.0, 97.8, 99.3, 99.5]
+
+    out_path = Path(PATH_TO_RESULTS) / "toorga"
+    plot_metric_ablation(x, fvd_coffee, fvd_spinach, "Ablation: FVD across single-video configurations (↓)", "FVD",
+                         f"{out_path}/fvd_single.png")
+    plot_metric_ablation(x, fvmd_coffee, fvmd_spinach, "Ablation: FVMD across single-video configurations (↓)", "FVMD",
+                         f"{out_path}/fvmd_single.png")
+    plot_metric_ablation(x, lpips_coffee, lpips_spinach, "Ablation: LPIPS across single-video configurations (↓)", "LPIPS",
+                         f"{out_path}/lpips_single.png")
+    plot_metric_ablation(x, tf_coffee, tf_spinach, "Ablation: VBench Temporal Flickering across single-video configurations (↑)",
+                         "Temporal Flickering (%)", f"{out_path}/temp_flicker_single.png")
+
 
 def ablation_multi_helper():
     x = [0, 1, 2, 3, 4]
@@ -229,11 +260,11 @@ def ablation_multi_helper():
     tf_coffee = [96.4, 96.8, 98.5, 99.0, 99.5]
     tf_salmon = [96.3, 96.7, 97.9, 98.6, 99.2]
 
-    out_path = "Z:\\ORGA\\figures\\graphs\\multi_ablation"
-    plot_metric_ablation(x, fvd_coffee, fvd_salmon, "Ablation: FVD across configurations (↓)", "FVD", f"{out_path}\\fvd.png")
-    plot_metric_ablation(x, fvmd_coffee, fvmd_salmon, "Ablation: FVMD across configurations (↓)", "FVMD", f"{out_path}\\fvmd.png")
-    plot_metric_ablation(x, lpips_coffee, lpips_salmon, "Ablation: LPIPS across configurations (↓)", "LPIPS", f"{out_path}\\lpips.png")
-    plot_metric_ablation(x, tf_coffee, tf_salmon, "Ablation: VBench Temporal Flickering across configurations (↑)", "Temporal Flickering (%)", f"{out_path}\\temp_flicker.png")
+    out_path = Path(PATH_TO_RESULTS) / "toorga"
+    plot_metric_ablation(x, fvd_coffee, fvd_salmon, "Ablation: FVD across multi-video configurations (↓)", "FVD", f"{out_path}/fvd_multi.png")
+    plot_metric_ablation(x, fvmd_coffee, fvmd_salmon, "Ablation: FVMD across multi-video configurations (↓)", "FVMD", f"{out_path}/fvmd_multi.png")
+    plot_metric_ablation(x, lpips_coffee, lpips_salmon, "Ablation: LPIPS across multi-video configurations (↓)", "LPIPS", f"{out_path}/lpips_multi.png")
+    plot_metric_ablation(x, tf_coffee, tf_salmon, "Ablation: VBench Temporal Flickering across multi-video configurations (↑)", "Temporal Flickering (%)", f"{out_path}/temp_flicker_multi.png")
 
 
 def slice_helper():
@@ -254,9 +285,9 @@ def slice_helper():
     # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\vanilla\\generated_frames\\cam09")
     # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices_cam09\\vanilla_horizontal_slice.png")
     # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=slice_y)
-    dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\gt_frames\\0002")
-    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices_cam09\\gt_horizontal_slice.png")
-    make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=278)
+    # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\gt_frames\\0002")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices_cam09\\gt_horizontal_slice.png")
+    # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=278)
     # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\rendered_frames\\cam09")
     # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\\\rendered_slice.png")
     # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=slice_y)
@@ -278,12 +309,50 @@ def slice_helper():
     # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\vanilla\\cam09")
     # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\slices_cam09\\vanilla_horizontal_slice.png")
     # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=slice_y)
-    dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\gt_frames\\0002")
-    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\slices_cam09\\gt_horizontal_slice.png")
-    make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=278)
+    # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\gt_frames\\0002")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\slices_cam09\\gt_horizontal_slice.png")
+    # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=278)
     # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\cam09")
     # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\\\rendered_slice.png")
     # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=slice_y)
+
+    # mul_path = Path(PATH_TO_RESULTS) / "multiple_3x15"
+    # slice_y = 110
+    #
+    # new_dir = mul_path / "slice_yoga_0"
+    # new_dir.mkdir(exist_ok=True)
+    #
+    # path1 = mul_path / "0_vanilla_yoga_3x15_0" / "generated_frames" / "cam08"
+    # out = new_dir / f"{slice_y}_vanilla.png"
+    # make_horizontal_slit_scan(str(path1), str(out), slice_height=slice_h, slice_y=slice_y)
+    #
+    # path1 = mul_path / "10_cfg__ddim__latent_blending_yoga_3x15_0" / "generated_frames" / "cam08"
+    # out = new_dir / f"{slice_y}_all.png"
+    # make_horizontal_slit_scan(str(path1), str(out), slice_height=slice_h, slice_y=slice_y)
+    #
+    # path1 = mul_path / "0_vanilla_welder_3x15_1" / "gt_frames" / "0001"
+    # out = new_dir / f"{slice_y}_gt.png"
+    # make_horizontal_slit_scan(str(path1), str(out), slice_height=slice_h, slice_y=slice_y - 10)
+
+    mul_path = Path(PATH_TO_RESULTS) / "robo_4x15"
+    exp_name = "robosapiens"+"58"
+    slice_y = 150
+
+    new_dir = mul_path / f"slice_{exp_name}"
+    new_dir.mkdir(exist_ok=True)
+
+    path1 = mul_path / f"0_vanilla_{exp_name}_4x15" / "generated_frames" / "cam08"
+    out = new_dir / f"{slice_y}_vanilla.png"
+    make_horizontal_slit_scan(str(path1), str(out), slice_height=slice_h, slice_y=slice_y)
+
+    path1 = mul_path / f"10_cfg__ddim__latent_blending_{exp_name}_4x15" / "generated_frames" / "cam08"
+    out = new_dir / f"{slice_y}_all.png"
+    make_horizontal_slit_scan(str(path1), str(out), slice_height=slice_h, slice_y=slice_y)
+
+    path1 = mul_path / f"0_vanilla_{exp_name}_4x15" / "gt_frames" / "1"
+    out = new_dir / f"{slice_y}_gt.png"
+    make_horizontal_slit_scan(str(path1), str(out), slice_height=slice_h, slice_y=slice_y + 20)
+
 
 def crop_red_box_cfg_helper():
     path = Path("Z:\\ORGA\\figures\\from_viewcrafter\\ddim_comparison\\cam_08_cfg_1.jpg")
@@ -305,28 +374,28 @@ def image_diff_cfg_helper():
     # save_image_difference(path1, path2, out)
 
     path1 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\gt_horizontal_slice.png")
-    path2 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\all_modifications_horizontal_slice.png")
-    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\diff_gt_all.png")
-    save_image_difference(path1, path2, out)
-    path2 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\ddim_plus_cfg_horizontal_slice.png")
-    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\diff_gt_cfg_ddim.png")
-    save_image_difference(path1, path2, out)
-    path2 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\only_cfg_horizontal_slice.png")
-    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\diff_gt_cfg.png")
-    save_image_difference(path1, path2, out)
-    path2 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\only_ddim_horizontal_slice.png")
-    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\diff_gt_ddim.png")
-    save_image_difference(path1, path2, out)
+    # path2 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\all_modifications_horizontal_slice.png")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\diff_gt_all.png")
+    # save_image_difference(path1, path2, out)
+    # path2 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\ddim_plus_cfg_horizontal_slice.png")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\diff_gt_cfg_ddim.png")
+    # save_image_difference(path1, path2, out)
+    # path2 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\only_cfg_horizontal_slice.png")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\diff_gt_cfg.png")
+    # save_image_difference(path1, path2, out)
+    # path2 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\only_ddim_horizontal_slice.png")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\diff_gt_ddim.png")
+    # save_image_difference(path1, path2, out)
     path2 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\vanilla_horizontal_slice.png")
     out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\diff_gt_vanilla.png")
     save_image_difference(path1, path2, out)
 
 
-
 def main():
-    slice_helper()
+    # slice_helper()
     # image_diff_cfg_helper()
-
+    ablation_multi_helper()
+    ablation_single_helper()
 
 if __name__ == "__main__":
     main()

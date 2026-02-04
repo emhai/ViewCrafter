@@ -243,11 +243,11 @@ class ViewCrafter:
                                        mode='bilinear',
                                        align_corners=False).permute(0, 2, 3, 1)
         save_video(masked_render_results, str(mask_save_dir / f'{type}_masked_render.mp4'), str(mask_save_dir / f"{type}_masked_render_results"))
-        visualize_masks_horizontal(masked_render_results, mask_save_dir / f"{type}_diff_masks_all.png")
+        visualize_masks_horizontal(masked_render_results, mask_save_dir, f"{type}_diff_masks")
 
         # boolean_masks are the masked_render_results, thresholded to [0, 1]
         boolean_masks = rendered_mask_to_binary(masked_render_results)
-        visualize_masks_horizontal(boolean_masks, mask_save_dir / f"{type}_bool_masks_all.png", cmap='Greys')
+        visualize_masks_horizontal(boolean_masks, mask_save_dir, f"{type}_bool_masks", cmap='Greys')
 
         cleaned = []
         for i in range(boolean_masks.shape[0]):
@@ -257,7 +257,7 @@ class ViewCrafter:
             cleaned.append(torch.from_numpy(cleaned_mask > 127))  # threshold back to bool
 
         cleaned_masks = torch.stack(cleaned, dim=0).to(self.device)
-        visualize_masks_horizontal(cleaned_masks, mask_save_dir / f"{type}_cleaned_masks.png", cmap='Greys')
+        visualize_masks_horizontal(cleaned_masks, mask_save_dir, f"{type}_cleaned_masks", cmap='Greys')
 
         # float_cleaned_mask = cleaned_masks.float()
         # float_cleaned_mask = float_cleaned_mask * 0.9
@@ -265,7 +265,7 @@ class ViewCrafter:
 
         # latent_masks are the boolean_masks downsampled to latent shape
         latent_masks = binary_mask_to_latent(cleaned_masks, self.noise_shape)
-        visualize_masks_horizontal(latent_masks.squeeze(), mask_save_dir / f"{type}_latent_masks_all.png", cmap='Greys')
+        visualize_masks_horizontal(latent_masks.squeeze(), mask_save_dir, f"{type}_latent_masks", cmap='Greys')
 
         if type == "bg":
             latent_masks = 1 - latent_masks

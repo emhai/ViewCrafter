@@ -81,7 +81,7 @@ def visualize_pixel_masks(full_res_mask, image, path, title):
     plt.savefig(path)
     plt.close(fig)
 
-def visualize_masks_horizontal(masks, path, cmap=None):
+def visualize_masks_horizontal(masks, path, name, cmap=None):
 
     if not path.parent.exists():
         path.parent.mkdir(parents=True)
@@ -90,6 +90,25 @@ def visualize_masks_horizontal(masks, path, cmap=None):
         masks = masks.detach().cpu().numpy()
 
     n = masks.shape[0]
+
+    for i in range(n):
+        mask = masks[i]
+
+        # Remove singleton channel if present (H×W×1 → H×W)
+        if mask.ndim == 3 and mask.shape[-1] == 1:
+            mask = mask[..., 0]
+
+        # Convert to uint8
+        if mask.dtype != np.uint8:
+            if mask.dtype == bool:
+                mask = mask.astype(np.uint8) * 255
+            elif mask.max() <= 1.0:
+                mask = (mask * 255).astype(np.uint8)
+            else:
+                mask = mask.astype(np.uint8)
+
+        cv2.imwrite(str(path / f"{name}_{i:03d}.png"), mask)
+
     fig, axes = plt.subplots(1, n, figsize=(n * 5, 5))
 
     for i in range(n):
@@ -98,7 +117,7 @@ def visualize_masks_horizontal(masks, path, cmap=None):
         axes[i].set_title(f"Mask {i}")
 
     plt.tight_layout()
-    plt.savefig(path)
+    plt.savefig(path / f"{name}.png")
     plt.close(fig)
 
 def visualize_latents(base_dir, intermediates, model, prefix="x_inter"):

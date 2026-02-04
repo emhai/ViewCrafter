@@ -472,7 +472,7 @@ def run_metrics(base_dir, known_gt=None):
         ])
 
 
-def rerun_metrics(results_dir):
+def rerun_metrics(results_dir, known_gt=None):
 
     for result in results_dir.iterdir():
         result_file = result / RESULTS_CSV_FILE
@@ -483,11 +483,11 @@ def rerun_metrics(results_dir):
             result_file.unlink()
         if tot_result_file.exists():
             tot_result_file.unlink()
-        if vis_folder.exists():
-            # todo ???? shutil.rmtree(vis_folder)
-            vis_folder.mkdir()
+        # if vis_folder.exists():
+            # shutil.rmtree(vis_folder)
+            # vis_folder.mkdir()
 
-        run_metrics(result)
+        run_metrics(result, known_gt=known_gt)
 
 def combine_files(results_dir):
 
@@ -551,8 +551,8 @@ def combine_files_per_dataset(results_dir):
 
 def main():
 
-    base_path = Path(PATH_TO_RESULTS) / "all_coffee_single"
-    # run_metrics(base_path)
+    base_path = Path(PATH_TO_RESULTS) / "single_3x15"
+    rerun_metrics(base_path, "cam16")
     combine_files(base_path)
 
 if __name__ == "__main__":
