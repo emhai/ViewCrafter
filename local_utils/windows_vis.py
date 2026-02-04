@@ -35,7 +35,17 @@ def save_image_difference(img_path_1, img_path_2, out_path, mode="rgb", amplify=
     Image.fromarray(diff).save(str(out_path))
 
 
-def make_horizontal_slit_scan(image_dir, output_path, slice_y=None, slice_height=4, ext=(".png", ".jpg", ".jpeg")):
+import os
+import cv2
+import numpy as np
+
+def make_horizontal_slit_scan(
+    image_dir,
+    output_path,
+    slice_y=None,
+    slice_height=4,
+    ext=(".png", ".jpg", ".jpeg"),
+):
     files = sorted(f for f in os.listdir(image_dir) if f.lower().endswith(ext))
     assert len(files) > 0, "No images found"
 
@@ -54,19 +64,34 @@ def make_horizontal_slit_scan(image_dir, output_path, slice_y=None, slice_height
     y0 = max(0, slice_y - slice_height // 2)
     y1 = min(h, y0 + slice_height)
 
+    # ---- visualize slice on first frame ----
+    vis = frames[0].copy()
+    cv2.rectangle(
+        vis,
+        (0, y0),
+        (w - 1, y1 - 1),
+        (0, 0, 255),  # red (BGR)
+        thickness=2,
+    )
+
+    vis_path = os.path.splitext(output_path)[0] + "_slice_vis.png"
+    cv2.imwrite(vis_path, vis)
+
+    # ---- build slit-scan ----
     stripes = []
     for img in frames:
         stripe = img[y0:y1, :, :]
         stripes.append(stripe)
 
     slit_scan = np.concatenate(stripes, axis=0)  # time → y-axis
-
     slit_scan = np.clip(slit_scan, 0, 255).astype(np.uint8)
 
     assert output_path.lower().endswith((".png", ".jpg", ".jpeg"))
     cv2.imwrite(output_path, slit_scan)
 
     print(f"Saved horizontal slit-scan to {output_path}")
+    print(f"Saved slice visualization to {vis_path}")
+
 
 
 def stitch_with_mask():
@@ -90,14 +115,97 @@ def stitch_with_mask():
     cv2.imwrite("stitched.png", res)
 
 
+def plot_metric_robo(x, yB, yN, yP, title, ylabel, out_path):
+    plt.figure()
+    plt.plot(x, yB, marker="o", label="B")
+    plt.plot(x, yN, marker="o", label="V")
+    plt.plot(x, yP, marker="o", label="P")
+    plt.xlabel("Distance between input videos (cm)")
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.xticks(x)
+    plt.grid(True, alpha=0.2)
+    plt.legend()
+    plt.savefig(out_path)
+
+def robo_helper():
+    # x-axis
+    x = [28, 33, 38, 43, 48, 53, 58]
+
+    psnr_B = [17.99, 17.23, 17.25, 17.25, 16.31, 15.96, 15.88]
+    psnr_N = [18.45, 17.50, 17.50, 17.41, 17.29, 16.19, 16.86]
+    psnr_P = [18.48, 17.54, 17.54, 17.44, 17.29, 16.19, 16.83]
+
+    ssim_B = [0.783, 0.772, 0.772, 0.772, 0.757, 0.749, 0.750]
+    ssim_N = [0.795, 0.783, 0.784, 0.782, 0.777, 0.756, 0.774]
+    ssim_P = [0.793, 0.782, 0.782, 0.780, 0.773, 0.753, 0.770]
+
+    lpips_B = [0.266, 0.298, 0.303, 0.303, 0.367, 0.392, 0.386]
+    lpips_N = [0.261, 0.285, 0.291, 0.308, 0.330, 0.385, 0.338]
+    lpips_P = [0.254, 0.283, 0.283, 0.299, 0.322, 0.375, 0.333]
+
+    fid_B = [58.9, 72.9, 72.2, 72.2, 95.1, 104.9, 105.2]
+    fid_N = [66.4, 80.4, 83.2, 94.4, 107.9, 127.7, 125.7]
+    fid_P = [65.3, 81.4, 81.4, 96.5, 103.7, 126.5, 124.8]
+
+    fvd_B = [1185, 1213, 1150, 1150, 1292, 1413, 1549]
+    fvd_N = [948, 860, 804, 847, 854, 1009, 1053]
+    fvd_P = [992, 826, 826, 868, 886, 1054, 1067]
+
+    fvmd_B = [1630, 2156, 2114, 2114, 5541, 7864, 6479]
+    fvmd_N = [1134, 1403, 1183, 1427, 1529, 1946, 1931]
+    fvmd_P = [1239, 1617, 1617, 1754, 1968, 2173, 2155]
+
+    subj_B = [95.1, 94.0, 94.2, 94.1, 92.9, 92.0, 92.2]
+    subj_N = [95.6, 95.1, 95.3, 95.3, 94.4, 94.4, 94.3]
+    subj_P = [95.8, 95.4, 95.5, 95.6, 94.7, 94.6, 94.5]
+
+    bg_B = [95.2, 93.1, 94.4, 94.1, 93.4, 93.4, 93.2]
+    bg_N = [95.1, 94.5, 94.6, 94.7, 93.8, 93.3, 94.3]
+    bg_P = [95.6, 95.1, 94.9, 95.1, 94.0, 93.8, 94.6]
+
+    tf_B = [96.7, 96.4, 96.6, 96.4, 95.7, 95.3, 95.4]
+    tf_N = [98.5, 98.4, 98.5, 98.5, 98.4, 98.4, 98.4]
+    tf_P = [98.6, 98.6, 98.6, 98.6, 98.6, 98.6, 98.6]
+
+    ms_B = [97.6, 97.3, 97.5, 97.4, 96.6, 96.4, 96.2]
+    ms_N = [99.1, 99.0, 99.0, 99.0, 98.9, 98.9, 98.9]
+    ms_P = [99.1, 99.1, 99.1, 99.1, 99.0, 99.0, 99.0]
+
+    aes_B = [65.7, 66.3, 65.2, 65.0, 65.0, 63.0, 62.9]
+    aes_N = [66.4, 65.8, 65.1, 62.3, 62.9, 60.7, 62.5]
+    aes_P = [65.7, 65.3, 63.9, 62.2, 62.0, 60.2, 62.0]
+
+    iq_B = [71.5, 72.4, 72.0, 71.8, 70.8, 71.6, 71.5]
+    iq_N = [66.9, 68.9, 68.8, 67.7, 66.7, 66.7, 67.1]
+    iq_P = [67.2, 69.2, 68.3, 68.0, 66.5, 66.5, 66.8]
+
+    # plot_metric_robo(x, psnr_B, psnr_N, psnr_P, "Robot: PSNR vs distance", "PSNR (↑)")
+    # plot_metric_robo(x, ssim_B, ssim_N, ssim_P, "Robot: SSIM vs distance", "SSIM (↑)")
+    # plot_metric_robo(x, fid_B, fid_N, fid_P, "Robot: FID vs distance", "FID (↓)")
+    # plot_metric_robo(x, subj_B, subj_N, subj_P, "Robot: VBench Subject Consistency vs distance","Subject Consistency (%) (↑)")
+    # plot_metric_robo(x, bg_B, bg_N, bg_P, "Robot: VBench Background Consistency vs distance", "Background Consistency (%) (↑)")
+    # plot_metric_robo(x, ms_B, ms_N, ms_P, "Robot: VBench Motion Smoothness vs distance", "Motion Smoothness (%) (↑)")
+    # plot_metric_robo(x, aes_B, aes_N, aes_P, "Robot: VBench Aesthetic Quality vs distance", "Aesthetic Quality (%) (↑)")
+    # plot_metric_robo(x, iq_B, iq_N, iq_P, "Robot: VBench Imaging Quality vs distance", "Imaging Quality (%) (↑)")
+
+    out_path = "Z:\\ORGA\\figures\\graphs\\robot"
+
+    plot_metric_robo(x, lpips_B, lpips_N, lpips_P, "Robot: LPIPS across distances (↓)", "LPIPS", f"{out_path}\\lpips.png")
+    plot_metric_robo(x, fvd_B, fvd_N, fvd_P, "Robot: FVD across distances (↓)", "FVD", f"{out_path}\\fvd.png")
+    plot_metric_robo(x, fvmd_B, fvmd_N, fvmd_P, "Robot: FVMD across distances (↓)", "FVMD",f"{out_path}\\fvmd.png")
+    plot_metric_robo(x, tf_B, tf_N, tf_P, "Robot: VBench Temporal Flickering across distances (↓)", "Temporal Flickering (%)", f"{out_path}\\temp_flicker.png")
+
+
 def plot_metric_ablation(x, y1, y2, title, ylabel, out_path):
     plt.figure()
     plt.plot(x, y1, marker="o", label="Coffee Near")
     plt.plot(x, y2, marker="o", label="Salmon Near")
-    plt.xlabel("Ablation configuration (0–4)")
+    plt.xlabel("Configuration (0)–(4)")
     plt.ylabel(ylabel)
     plt.title(title)
-    plt.grid(True)
+    plt.grid(True, alpha=0.2)
+    plt.xticks(x)
     plt.legend()
     plt.savefig(str(out_path))
 
@@ -122,33 +230,60 @@ def ablation_multi_helper():
     tf_salmon = [96.3, 96.7, 97.9, 98.6, 99.2]
 
     out_path = "Z:\\ORGA\\figures\\graphs\\multi_ablation"
-    plot_metric_ablation(x, fvd_coffee, fvd_salmon, "Ablation: FVD across configurations", "FVD (↓)", f"{out_path}\\fvd.png")
-    plot_metric_ablation(x, fvmd_coffee, fvmd_salmon, "Ablation: FVMD across configurations", "FVMD (↓)", f"{out_path}\\fvmd.png")
-    plot_metric_ablation(x, lpips_coffee, lpips_salmon, "Ablation: LPIPS across configurations", "LPIPS (↓)", f"{out_path}\\lpips.png")
-    plot_metric_ablation(x, tf_coffee, tf_salmon, "Ablation: VBench Temporal Flickering", "Temporal Flickering (%) (↑)", f"{out_path}\\temp_flicker.png")
+    plot_metric_ablation(x, fvd_coffee, fvd_salmon, "Ablation: FVD across configurations (↓)", "FVD", f"{out_path}\\fvd.png")
+    plot_metric_ablation(x, fvmd_coffee, fvmd_salmon, "Ablation: FVMD across configurations (↓)", "FVMD", f"{out_path}\\fvmd.png")
+    plot_metric_ablation(x, lpips_coffee, lpips_salmon, "Ablation: LPIPS across configurations (↓)", "LPIPS", f"{out_path}\\lpips.png")
+    plot_metric_ablation(x, tf_coffee, tf_salmon, "Ablation: VBench Temporal Flickering across configurations (↑)", "Temporal Flickering (%)", f"{out_path}\\temp_flicker.png")
 
 
 def slice_helper():
     slice_h = 12
-    dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\all_modifications\\generated_frames\\cam08")
-    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\all_modifications_horizontal_slice.png")
-    make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h)
-    dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\only_ddim\\generated_frames\\cam08")
-    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\only_ddim_horizontal_slice.png")
-    make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h)
-    dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\only_cfg\\generated_frames\\cam08")
-    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\only_cfg_horizontal_slice.png")
-    make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h)
-    dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\ddim_plus_cfg\\generated_frames\\cam08")
-    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\ddim_plus_cfg_horizontal_slice.png")
-    make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h)
-    dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\vanilla\\generated_frames\\cam08")
-    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\vanilla_horizontal_slice.png")
-    make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h)
-    dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\original_frames\\0001")
-    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\original_horizontal_slice.png")
-    make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h)
+    # slice_y = None
+    # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\all_modifications\\generated_frames\\cam09")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices_cam09\\all_modifications_horizontal_slice.png")
+    # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=slice_y)
+    # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\only_ddim\\generated_frames\\cam09")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices_cam09\\only_ddim_horizontal_slice.png")
+    # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=slice_y)
+    # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\only_cfg\\generated_frames\\cam09")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices_cam09\\only_cfg_horizontal_slice.png")
+    # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=slice_y)
+    # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\ddim_plus_cfg\\generated_frames\\cam09")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices_cam09\\ddim_plus_cfg_horizontal_slice.png")
+    # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=slice_y)
+    # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\vanilla\\generated_frames\\cam09")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices_cam09\\vanilla_horizontal_slice.png")
+    # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=slice_y)
+    dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\gt_frames\\0002")
+    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices_cam09\\gt_horizontal_slice.png")
+    make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=278)
+    # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\rendered_frames\\cam09")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\\\rendered_slice.png")
+    # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=slice_y)
 
+    slice_h = 12
+    slice_y = None
+    # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\all\\cam09")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\slices_cam09\\all_modifications_horizontal_slice.png")
+    # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=slice_y)
+    # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\ddim\\cam09")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\slices_cam09\\only_ddim_horizontal_slice.png")
+    # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=slice_y)
+    # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\cfg\\cam09")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\slices_cam09\\only_cfg_horizontal_slice.png")
+    # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=slice_y)
+    # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\cfg_ddim\\cam09")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\slices_cam09\\ddim_plus_cfg_horizontal_slice.png")
+    # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=slice_y)
+    # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\vanilla\\cam09")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\slices_cam09\\vanilla_horizontal_slice.png")
+    # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=slice_y)
+    dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\gt_frames\\0002")
+    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\slices_cam09\\gt_horizontal_slice.png")
+    make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=278)
+    # dir = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\cam09")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\\\rendered_slice.png")
+    # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=slice_y)
 
 def crop_red_box_cfg_helper():
     path = Path("Z:\\ORGA\\figures\\from_viewcrafter\\ddim_comparison\\cam_08_cfg_1.jpg")
@@ -160,18 +295,37 @@ def crop_red_box_cfg_helper():
 
 
 def image_diff_cfg_helper():
-    path1 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\ddim_comparison\\cam_08_cfg_1_crop.jpg")
-    path2 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\ddim_comparison\\cam_08_cfg_29_crop.jpg")
-    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\ddim_comparison\\cfg_diff_29.jpg")
+    # path1 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\ddim_comparison\\cam_08_cfg_1_crop.jpg")
+    # path2 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\ddim_comparison\\cam_08_cfg_29_crop.jpg")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\ddim_comparison\\cfg_diff_29.jpg")
+    # save_image_difference(path1, path2, out)
+    # path1 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\ddim_comparison\\cam_08_cfg_1_crop.jpg")
+    # path2 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\ddim_comparison\\cam_08_ddim_cfg_29_crop.jpg")
+    # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\ddim_comparison\\cfg_ddim_diff_29.jpg")
+    # save_image_difference(path1, path2, out)
+
+    path1 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\gt_horizontal_slice.png")
+    path2 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\all_modifications_horizontal_slice.png")
+    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\diff_gt_all.png")
     save_image_difference(path1, path2, out)
-    path1 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\ddim_comparison\\cam_08_cfg_1_crop.jpg")
-    path2 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\ddim_comparison\\cam_08_ddim_cfg_29_crop.jpg")
-    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\ddim_comparison\\cfg_ddim_diff_29.jpg")
+    path2 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\ddim_plus_cfg_horizontal_slice.png")
+    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\diff_gt_cfg_ddim.png")
     save_image_difference(path1, path2, out)
+    path2 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\only_cfg_horizontal_slice.png")
+    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\diff_gt_cfg.png")
+    save_image_difference(path1, path2, out)
+    path2 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\only_ddim_horizontal_slice.png")
+    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\diff_gt_ddim.png")
+    save_image_difference(path1, path2, out)
+    path2 = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\vanilla_horizontal_slice.png")
+    out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\coffee_all\\slices\\diff_gt_vanilla.png")
+    save_image_difference(path1, path2, out)
+
 
 
 def main():
-    ablation_multi_helper()
+    slice_helper()
+    # image_diff_cfg_helper()
 
 
 if __name__ == "__main__":
