@@ -334,10 +334,10 @@ def create_robo_dataset():
 
 def main():
 
-    setup_duration = [3, 15]
+    setup_duration = [10, 30]
     output_path = Path("/mnt/data/DATASETS/MODIFIED")
     # run(output_path, setup_duration, "multiple")
-    run(output_path, setup_duration, "single")
+    run(output_path, setup_duration, "multiple")
     # create_robo_dataset()
 
 

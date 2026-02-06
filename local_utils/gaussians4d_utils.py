@@ -102,7 +102,7 @@ def setup_4dgs_from_videos(video_folder, exp_name):
         print(f"Extracting frames from {video}")
         target_path.mkdir()
 
-        cmd = f'ffmpeg  -i {str(video)} -start_number 1 {str(target_path)}/frame_%05d.jpg'
+        cmd = f'ffmpeg  -i {str(video)} -start_number 1 -q:v 1 -qmin 1 -qmax 1 {str(target_path)}/frame_%05d.jpg'
         run_command(cmd)
 
 
@@ -161,9 +161,10 @@ def test_4dgs_after_complete_run(base_dir, exp_name):
 
 
 def main():
-    setup_4dgs_from_videos(Path("/home/emmahaidacher/Desktop/4DGaussians/data/multipleview/original_ds_salmon_3"),
-                           "o_downsampled_salmon_3")
-
+    setup_4dgs_from_videos(Path("/mnt/data/DATASETS/MODIFIED/4D_Gaussian_ground_truth/original_ds_coffee_2"), "original_ds_coffee_2")
+    # setup_4dgs_from_videos(Path("/mnt/data/DATASETS/MODIFIED/4D_Gaussian_ground_truth/original_ds_coffee_3"), "original_ds_coffee_3")
+    # setup_4dgs_from_videos(Path("/mnt/data/DATASETS/MODIFIED/4D_Gaussian_ground_truth/original_ds_salmon_2"), "original_ds_salmon_2")
+    # setup_4dgs_from_videos(Path("/mnt/data/DATASETS/MODIFIED/4D_Gaussian_ground_truth/original_ds_salmon_3"), "original_ds_salmon_3")
 
 if __name__ == '__main__':
     main()

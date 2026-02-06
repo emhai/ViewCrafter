@@ -47,6 +47,7 @@ def make_horizontal_slit_scan(
     slice_y=None,
     slice_height=4,
     ext=(".png", ".jpg", ".jpeg"),
+        frame=0
 ):
     files = sorted(f for f in os.listdir(image_dir) if f.lower().endswith(ext))
     assert len(files) > 0, "No images found"
@@ -67,7 +68,7 @@ def make_horizontal_slit_scan(
     y1 = min(h, y0 + slice_height)
 
     # ---- visualize slice on first frame ----
-    vis = frames[0].copy()
+    vis = frames[frame].copy()
     cv2.rectangle(
         vis,
         (0, y0),
@@ -316,42 +317,46 @@ def slice_helper():
     # out = Path("Z:\\ORGA\\figures\\from_viewcrafter\\salmon_all\\\\rendered_slice.png")
     # make_horizontal_slit_scan(str(dir), str(out), slice_height=slice_h, slice_y=slice_y)
 
-    # mul_path = Path(PATH_TO_RESULTS) / "multiple_3x15"
-    # slice_y = 110
-    #
-    # new_dir = mul_path / "slice_yoga_0"
-    # new_dir.mkdir(exist_ok=True)
-    #
-    # path1 = mul_path / "0_vanilla_yoga_3x15_0" / "generated_frames" / "cam08"
-    # out = new_dir / f"{slice_y}_vanilla.png"
-    # make_horizontal_slit_scan(str(path1), str(out), slice_height=slice_h, slice_y=slice_y)
-    #
-    # path1 = mul_path / "10_cfg__ddim__latent_blending_yoga_3x15_0" / "generated_frames" / "cam08"
-    # out = new_dir / f"{slice_y}_all.png"
-    # make_horizontal_slit_scan(str(path1), str(out), slice_height=slice_h, slice_y=slice_y)
-    #
+        #mul_path = Path(PATH_TO_RESULTS) / "all_spinach_single"
+        #slice_y = 400
+        #frame = 10
+        #new_dir = mul_path / f"slices_cam16"
+        #new_dir.mkdir(exist_ok=True)
+#   #
+        #exp_no_l = ["0", "3" ,"7", "8", "10"]
+        #exp_l = ["vanilla", "ddim", "cfg", "cfg__ddim", "cfg__ddim__latent_blending"]
+        #names  = ["1_vanilla", "2_ddim", "3_cfg", "4_cfg_ddim", "5_all"]
+#   #
+        #for exp_no, exp, name in zip(exp_no_l, exp_l, names):
+        #    path1 = mul_path / f"{exp_no}_{exp}_spinach_3x15" / "generated_frames" / "cam16"
+        #    out = new_dir / f"{slice_y}_{name}.png"
+        #    make_horizontal_slit_scan(str(path1), str(out), slice_height=slice_h, slice_y=slice_y, frame=frame)
+#   #
+        #path1 = mul_path  / "0_vanilla_spinach_3x15" / "gt_frames" / "0001"
+        #out = new_dir / f"{slice_y}_gt.png"
+        #make_horizontal_slit_scan(str(path1), str(out), slice_height=slice_h, slice_y=slice_y + 10, frame=frame)
+
     # path1 = mul_path / "0_vanilla_welder_3x15_1" / "gt_frames" / "0001"
     # out = new_dir / f"{slice_y}_gt.png"
     # make_horizontal_slit_scan(str(path1), str(out), slice_height=slice_h, slice_y=slice_y - 10)
-
-    mul_path = Path(PATH_TO_RESULTS) / "robo_4x15"
-    exp_name = "robosapiens"+"58"
-    slice_y = 150
-
-    new_dir = mul_path / f"slice_{exp_name}"
+#
+    mul_path = Path("/mnt/data/RESULTS/20260206_1339_long_run_300_frames")
+    slice_y = 400
+#
+    new_dir = mul_path / f"slice"
     new_dir.mkdir(exist_ok=True)
-
-    path1 = mul_path / f"0_vanilla_{exp_name}_4x15" / "generated_frames" / "cam08"
-    out = new_dir / f"{slice_y}_vanilla.png"
+#
+    path1 = mul_path / "generated_frames" / "cam09"
+    out = new_dir / f"{slice_y}_generated.png"
     make_horizontal_slit_scan(str(path1), str(out), slice_height=slice_h, slice_y=slice_y)
-
-    path1 = mul_path / f"10_cfg__ddim__latent_blending_{exp_name}_4x15" / "generated_frames" / "cam08"
-    out = new_dir / f"{slice_y}_all.png"
-    make_horizontal_slit_scan(str(path1), str(out), slice_height=slice_h, slice_y=slice_y)
-
-    path1 = mul_path / f"0_vanilla_{exp_name}_4x15" / "gt_frames" / "1"
+#
+    path1 = mul_path / "gt_frames" / "0002"
     out = new_dir / f"{slice_y}_gt.png"
-    make_horizontal_slit_scan(str(path1), str(out), slice_height=slice_h, slice_y=slice_y + 20)
+    make_horizontal_slit_scan(str(path1), str(out), slice_height=slice_h, slice_y=slice_y - 10)
+
+    # path1 = mul_path / f"0_vanilla_{exp_name}_4x15" / "gt_frames" / "1"
+    # out = new_dir / f"{slice_y}_gt.png"
+    # make_horizontal_slit_scan(str(path1), str(out), slice_height=slice_h, slice_y=slice_y + 20)
 
 
 def crop_red_box_cfg_helper():
@@ -392,10 +397,10 @@ def image_diff_cfg_helper():
 
 
 def main():
-    # slice_helper()
+    slice_helper()
     # image_diff_cfg_helper()
-    ablation_multi_helper()
-    ablation_single_helper()
+     #ablation_multi_helper()
+     #ablation_single_helper()
 
 if __name__ == "__main__":
     main()
